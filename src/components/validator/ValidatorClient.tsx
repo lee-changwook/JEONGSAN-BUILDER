@@ -1,8 +1,8 @@
 'use client';
 
 import { StepIndicator } from '@/components/common/StepIndicator';
-import { Step1Setup } from '@/features/validator/sections/Step1Setup';
-import { Step2Validation } from '@/features/validator/sections/Step2Validation';
+import { Step1Setup } from '@/components/validator/sections/Step1Setup';
+import { Step2Validation } from '@/components/validator/sections/Step2Validation';
 import { useValidatorStore } from '@/store/validator-store';
 import type { ValidatorStep } from '@/features/validator/types';
 

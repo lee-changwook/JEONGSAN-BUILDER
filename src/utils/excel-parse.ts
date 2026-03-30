@@ -1,5 +1,7 @@
 import ExcelJS from 'exceljs';
 
+import type { AttendanceStatus, StudentRow, CourseData, CourseInfo, CourseRule } from '@/features/validator/types';
+
 export interface ParsedStudent {
   name: string;
   school: string;
@@ -18,6 +20,7 @@ export interface ExcelParseResult {
   students: ParsedStudent[];
   sessionDates: string[];
   courseMeta: ParsedCourseMeta;
+  courseData: CourseData | null;
 }
 
 function cellString(value: ExcelJS.CellValue | undefined): string {
@@ -32,6 +35,18 @@ function cellString(value: ExcelJS.CellValue | undefined): string {
 
 function parseNumber(raw: string): number {
   return Number(raw.replace(/[^0-9.-]/g, '')) || 0;
+}
+
+function mapExcelAttendance(marker: string): AttendanceStatus {
+  switch (marker) {
+    case '출': return 'present';
+    case '결': return 'absent';
+    case '지': return 'late';
+    case '동': return 'dongYoung';
+    case '보': return 'bogang';
+    case '휴': return 'hyuGang';
+    default: return 'present';
+  }
 }
 
 function extractLast4Digits(raw: string): string {
@@ -92,7 +107,7 @@ function detectYear(ws: ExcelJS.Worksheet): number {
 }
 
 export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResult> {
-  const emptyResult: ExcelParseResult = { students: [], sessionDates: [], courseMeta: { sessionCount: null, sessionFee: null, gyojaeBi: null } };
+  const emptyResult: ExcelParseResult = { students: [], sessionDates: [], courseMeta: { sessionCount: null, sessionFee: null, gyojaeBi: null }, courseData: null };
 
   const buffer = await file.arrayBuffer();
   const wb = new ExcelJS.Workbook();
@@ -112,6 +127,7 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
   let phoneColIdx = -1;
   let paidUnpaidColIdx = -1;
   let firstDateCol = -1;
+  const dateColIndices: number[] = [];
 
   for (let col = 1; col <= ws.columnCount; col += 1) {
     const val = cellString(headerRow.getCell(col).value).trim();
@@ -149,6 +165,7 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
       const dateStr = `${year}-${m}-${d}`;
 
       if (firstDateCol < 0) firstDateCol = col;
+      dateColIndices.push(col);
       sessionDates.push(dateStr);
     }
   }
@@ -156,6 +173,7 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
   if (nameColIdx < 0) nameColIdx = 3;
 
   const students: ParsedStudent[] = [];
+  const studentRows: StudentRow[] = [];
 
   for (let rowIdx = 8; rowIdx <= ws.rowCount; rowIdx += 1) {
     const row = ws.getRow(rowIdx);
@@ -182,12 +200,24 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
       phoneVal = extractLast4Digits(firstPhone);
     }
 
+    let paidAmount = 0;
     let previousUnpaid = 0;
     if (paidUnpaidColIdx > 0) {
       const rawVal = cellString(row.getCell(paidUnpaidColIdx).value).trim();
       const slashIdx = rawVal.indexOf('/');
       if (slashIdx >= 0) {
+        paidAmount = parseNumber(rawVal.slice(0, slashIdx));
         previousUnpaid = parseNumber(rawVal.slice(slashIdx + 1));
+      } else {
+        paidAmount = parseNumber(rawVal);
+      }
+    }
+
+    const attendance: Record<string, AttendanceStatus> = {};
+    for (let di = 0; di < dateColIndices.length; di += 1) {
+      const marker = cellString(row.getCell(dateColIndices[di]).value).trim();
+      if (marker) {
+        attendance[sessionDates[di]] = mapExcelAttendance(marker);
       }
     }
 
@@ -197,6 +227,17 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
       grade: gradeVal,
       parentPhone: phoneVal,
       previousUnpaid,
+    });
+
+    studentRows.push({
+      name: nameVal,
+      school: schoolVal,
+      attendance,
+      discount: 0,
+      unpaidAmount: previousUnpaid,
+      status: 'active',
+      nabipAmount: paidAmount,
+      computedAmount: 0,
     });
   }
 
@@ -232,5 +273,28 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
     }
   }
 
-  return { students, sessionDates, courseMeta };
+  let courseData: CourseData | null = null;
+  if (studentRows.length > 0) {
+    const courseName = cellString(ws.getCell('A1').value).trim().replace(/\*.*$/, '').trim() || 'ACA2000 수업';
+    const course: CourseInfo = {
+      id: 'aca-upload',
+      name: courseName,
+      teacher: '',
+      studentCount: studentRows.length,
+      dayOfWeek: '',
+      time: '',
+    };
+    const rule: CourseRule = {
+      schedule: '',
+      unitPrice: courseMeta.sessionFee ?? 0,
+      totalHoesu: courseMeta.sessionCount ?? sessionDates.length,
+      gyojaeBi: courseMeta.gyojaeBi ?? 0,
+      queryPeriodStart: `${year}-${String(month).padStart(2, '0')}-01`,
+      queryPeriodEnd: `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`,
+      hoechaSchedule: sessionDates,
+    };
+    courseData = { course, students: studentRows, rule };
+  }
+
+  return { students, sessionDates, courseMeta, courseData };
 }

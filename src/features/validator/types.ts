@@ -1,31 +1,17 @@
+import type { FindingSeverity, CellHighlight, ValidationFinding } from '@/aca/domain/sueop/validator';
+export type { FindingSeverity, CellHighlight, ValidationFinding };
+
 export type DataSource = 'tikita' | 'aca2000';
 
 export type ValidatorStep = 1 | 2;
-
-export type FindingSeverity = 'error' | 'warning' | 'info';
-
-export type FindingCategory = 'chulgyeol' | 'amount' | 'sunap' | 'student-status';
 
 export type FindingStatus = 'pending' | 'resolved' | 'on-hold';
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'dongYoung' | 'bogang' | 'hyuGang';
 
-export interface ValidationFinding {
-  id: string;
-  severity: FindingSeverity;
-  category: FindingCategory;
-  studentName: string;
-  gangjwaName: string;
-  message: string;
-  evidence: string;
-  diff: { field: string; expected: string | number; actual: string | number };
-  suggestion: string;
-  status: FindingStatus;
-}
-
 export interface ChecklistItem {
   id: string;
-  label: boolean;
+  label: string;
   done: boolean;
 }
 
@@ -66,11 +52,6 @@ export interface CourseData {
   rule: CourseRule;
 }
 
-export interface CellHighlight {
-  severity: FindingSeverity;
-  message: string;
-}
-
 export interface AnalysisRow {
   studentName: string;
   school: string;
@@ -106,10 +87,10 @@ export interface CourseReport {
   findings: Array<{
     id: string;
     severity: FindingSeverity;
-    category: FindingCategory;
-    studentName: string;
+    category: string;
     message: string;
-    evidence: string;
+    reason: string;
+    evidence: Record<string, string | number>;
     suggestion: string;
   }>;
 }

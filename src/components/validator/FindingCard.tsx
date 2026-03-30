@@ -15,12 +15,18 @@ const severityLabelMap = {
   info: '정보',
 } as const;
 
-const categoryLabelMap = {
-  chulgyeol: '출결 불일치',
-  amount: '금액 불일치',
-  sunap: '수납 이상',
-  'student-status': '학생 상태 이상',
-} as const;
+const categoryLabelMap: Record<string, string> = {
+  mapping: '데이터 맵핑',
+  connection: '연결 상태',
+  'sueomnyo-existence': '수업료 존재',
+  'chulseok-sueomnyo': '출결-수업료',
+  consistency: '정합성',
+  timing: '타이밍',
+  structure: '구조',
+  'amount-guess': '금액 추정',
+  attendance: '출결',
+  anomaly: '이상치',
+};
 
 const statusLabelMap: Record<FindingStatus, string> = {
   pending: '미처리',
@@ -48,7 +54,7 @@ export function FindingCard({ finding, status, mode, onAction }: FindingCardProp
         <span className={cn('text-xs font-semibold px-2.5 py-0.5 rounded-md', severityBadgeClassMap[finding.severity])}>
           {severityLabelMap[finding.severity]}
         </span>
-        <span className="text-[13px] text-gray-500 font-medium">{categoryLabelMap[finding.category]}</span>
+        <span className="text-[13px] text-gray-500 font-medium">{categoryLabelMap[finding.category] ?? finding.category}</span>
         <span
           className={cn(
             'ml-auto text-xs font-semibold px-2.5 py-0.5 rounded-md',
@@ -60,17 +66,19 @@ export function FindingCard({ finding, status, mode, onAction }: FindingCardProp
         </span>
       </div>
 
-      <div className="text-[15px] font-semibold mb-1.5">
-        {finding.studentName} <span className="text-gray-500 font-normal text-sm">· {finding.gangjwaName}</span>
-      </div>
-
       <div className="text-sm text-gray-700 mb-1.5 leading-relaxed">{finding.message}</div>
 
-      <div className="text-[13px] text-gray-500 leading-normal mb-2.5">{finding.evidence}</div>
+      <div className="text-[13px] text-gray-500 leading-normal mb-2.5">{finding.reason}</div>
 
-      <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 text-[13px] font-semibold px-2.5 py-1 rounded-md mb-3.5">
-        {finding.diff.field}: {finding.diff.expected} → {finding.diff.actual}
-      </div>
+      {Object.keys(finding.evidence).length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2.5 mb-3.5 text-[13px] text-gray-600 leading-relaxed">
+          {Object.entries(finding.evidence).map(([key, value]) => (
+            <div key={key}>
+              {key}: {value}
+            </div>
+          ))}
+        </div>
+      )}
 
       {finding.suggestion && (
         <div className="bg-sky-50 border border-sky-200 rounded-lg px-3.5 py-3 mb-3.5 flex gap-2 text-[13px] text-sky-700 leading-normal">
@@ -81,7 +89,7 @@ export function FindingCard({ finding, status, mode, onAction }: FindingCardProp
 
       {mode === 'edit' && status === 'pending' && (
         <div className="flex gap-2 flex-wrap">
-          {finding.category === 'chulgyeol' && (
+          {(finding.category === 'attendance' || finding.category === 'chulseok-sueomnyo') && (
             <button
               className="px-3.5 py-1.5 text-[13px] font-medium rounded-[7px] cursor-pointer bg-gray-900 text-white border border-gray-900 flex items-center gap-1.5 transition-colors hover:bg-gray-700"
               onClick={() => onAction?.('open-chulgyeol')}

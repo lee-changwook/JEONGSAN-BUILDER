@@ -5,12 +5,18 @@ import { Button } from '@/components/ui/button';
 import type { ValidationFinding, AttendanceStatus } from '@/features/validator/types';
 import { useValidatorStore } from '@/store/validator-store';
 
-const categoryTitleMap = {
-  chulgyeol: '출결 불일치 수정',
-  amount: '금액 불일치 수정',
-  sunap: '수납 이상 확인',
-  'student-status': '학생 상태 확인',
-} as const;
+const categoryTitleMap: Record<string, string> = {
+  mapping: '데이터 맵핑 확인',
+  connection: '연결 상태 확인',
+  'sueomnyo-existence': '수업료 존재 확인',
+  'chulseok-sueomnyo': '출결-수업료 불일치 수정',
+  consistency: '정합성 확인',
+  timing: '타이밍 확인',
+  structure: '구조 확인',
+  'amount-guess': '금액 추정 확인',
+  attendance: '출결 불일치 수정',
+  anomaly: '이상치 확인',
+};
 
 const attendanceLabels: Record<AttendanceStatus, string> = {
   present: '출',
@@ -45,10 +51,11 @@ interface EditModalProps {
 
 export function EditModal({ finding, onSave, onClose }: EditModalProps) {
   const { loadedData } = useValidatorStore();
-  const [editValue, setEditValue] = useState(String(finding.diff.actual));
 
-  const courseData = loadedData.find((cd) => cd.course.name === finding.gangjwaName);
-  const studentData = courseData?.students.find((s) => s.name === finding.studentName);
+  const firstCourse = loadedData[0];
+  const studentData = firstCourse?.students.find((s) =>
+    finding.message.startsWith(s.name)
+  );
 
   const [localAttendance, setLocalAttendance] = useState<Record<string, AttendanceStatus>>(
     studentData?.attendance ? { ...studentData.attendance } : {},
@@ -78,30 +85,24 @@ export function EditModal({ finding, onSave, onClose }: EditModalProps) {
       onClick={handleOverlayClick}
     >
       <div className="bg-white rounded-xl p-6 shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-gray-200 w-[520px] max-h-[80vh] overflow-y-auto">
-        <div className="text-base font-bold mb-1">{categoryTitleMap[finding.category]}</div>
+        <div className="text-base font-bold mb-1">{categoryTitleMap[finding.category] ?? finding.category}</div>
         <div className="text-[13px] text-gray-500 mb-5">
-          {finding.studentName} &middot; {finding.gangjwaName}
+          {finding.message}
         </div>
 
-        <div className="mb-5">
-          <div className="text-[13px] text-gray-500 mb-2">{finding.diff.field}</div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <div className="text-[13px] text-gray-500 mb-1.5">기대값</div>
-              <div className="px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm bg-white w-full">
-                {finding.diff.expected}
+        <div className="text-[13px] text-gray-500 leading-normal mb-3">{finding.reason}</div>
+
+        {Object.keys(finding.evidence).length > 0 && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2.5 mb-5 text-[13px] text-gray-600 leading-relaxed">
+            {Object.entries(finding.evidence).map(([key, value]) => (
+              <div key={key}>
+                {key}: {value}
               </div>
-            </div>
-            <div className="flex-1">
-              <div className="text-[13px] text-gray-500 mb-1.5">실제값</div>
-              <div className="px-3.5 py-2.5 border border-red-600 rounded-lg text-sm bg-red-50 w-full text-red-600 font-semibold">
-                {finding.diff.actual}
-              </div>
-            </div>
+            ))}
           </div>
-        </div>
+        )}
 
-        {finding.category === 'chulgyeol' && dates.length > 0 && (
+        {(finding.category === 'attendance' || finding.category === 'chulseok-sueomnyo') && dates.length > 0 && (
           <div className="mb-5 border border-gray-200 rounded-lg p-4 bg-[#fafbfd]">
             <div className="text-[13px] font-semibold text-gray-900 mb-3">
               출결 현황 <span className="font-normal text-gray-400 text-[11px]">(클릭으로 상태 변경)</span>
@@ -127,24 +128,6 @@ export function EditModal({ finding, onSave, onClose }: EditModalProps) {
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {finding.category === 'amount' && (
-          <div className="mb-4">
-            <div className="text-[13px] text-gray-500 mb-1.5">수정 금액</div>
-            <input
-              className="px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm bg-white w-full outline-none focus:border-gray-900"
-              type="number"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-            />
-          </div>
-        )}
-
-        {(finding.category === 'sunap' || finding.category === 'student-status') && (
-          <div className="text-[13px] text-gray-500 leading-normal px-3.5 py-3 bg-gray-50 rounded-lg mb-4">
-            {finding.evidence}
           </div>
         )}
 

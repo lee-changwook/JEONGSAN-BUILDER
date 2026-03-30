@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { cn } from '@/lib/utils';
 import { Spreadsheet } from '@/components/validator/Spreadsheet';
 import { useValidatorStore } from '@/store/validator-store';
 import { makeDates } from '@/mocks/shared-data';
@@ -9,56 +7,55 @@ import type { FindingSeverity } from '@/features/validator/types';
 
 export function Step2Validation() {
   const {
-    findings,
+    report,
     findingStatuses,
     loadedData,
     dataSource,
     selectedMonth,
     acaSpreadsheetData,
-    courseReports,
-    updateSpreadsheetCell,
     updateAttendanceCell,
   } = useValidatorStore();
 
   const isTikita = dataSource === 'tikita';
-  const [selectedCourseIdx, setSelectedCourseIdx] = useState(0);
 
-  const activeReport = courseReports[selectedCourseIdx] ?? null;
-  const errorCount = activeReport?.summary.errorCount ?? 0;
-  const warningCount = activeReport?.summary.warningCount ?? 0;
-  const issueStudentNames = new Set(
-    activeReport?.findings
-      .filter((f) => f.severity === 'error' || f.severity === 'warning')
-      .map((f) => f.studentName) ?? [],
-  );
-  const normalCount = (activeReport?.summary.totalStudents ?? 0) - issueStudentNames.size;
-
-  const activeCourse = loadedData[selectedCourseIdx] ?? loadedData[0];
+  const activeCourse = loadedData[0] ?? null;
   const courseId = activeCourse?.course.id ?? '';
   const students = isTikita
     ? activeCourse?.students ?? []
     : acaSpreadsheetData[courseId] ?? activeCourse?.students ?? [];
-  const dates = activeCourse ? makeDates(activeCourse.course.dayOfWeek) : [];
+  const dates = activeCourse
+    ? (isTikita ? makeDates(activeCourse.course.dayOfWeek) : activeCourse.rule.hoechaSchedule)
+    : [];
 
-  const courseFindings = findings.filter((f) => f.gangjwaName === activeCourse?.course.name);
+  const errorCount = report?.summary.errorCount ?? 0;
+  const warningCount = report?.summary.warningCount ?? 0;
+  const issueStudentNames = new Set(
+    report?.analysisRows
+      .filter((row) => row.findings.some((f) => f.severity === 'error' || f.severity === 'warning'))
+      .map((row) => row.sugangsaengName) ?? [],
+  );
+  const normalCount = (report?.analysisRows.length ?? 0) - issueStudentNames.size;
 
   const rowFindingsMap: Record<number, Array<{ id: string; severity: FindingSeverity; message: string; suggestion: string }>> = {};
-  if (activeReport) {
-    const pendingFindings = courseFindings.filter(
-      (f) => (f.severity === 'error' || f.severity === 'warning') && (findingStatuses[f.id] ?? 'pending') === 'pending',
-    );
-    for (const f of pendingFindings) {
-      const rowIdx = activeReport.rows.findIndex((r) => r.studentName === f.studentName);
-      if (rowIdx >= 0) {
-        if (!rowFindingsMap[rowIdx]) rowFindingsMap[rowIdx] = [];
-        rowFindingsMap[rowIdx].push({ id: f.id, severity: f.severity, message: f.message, suggestion: f.suggestion });
+  if (report) {
+    report.analysisRows.forEach((row, rowIdx) => {
+      const pending = row.findings.filter(
+        (f) => (f.severity === 'error' || f.severity === 'warning') && (findingStatuses[f.id] ?? 'pending') === 'pending',
+      );
+      if (pending.length > 0) {
+        rowFindingsMap[rowIdx] = pending.map((f) => ({
+          id: f.id,
+          severity: f.severity,
+          message: f.message,
+          suggestion: f.suggestion,
+        }));
       }
-    }
+    });
   }
 
   const highlights: Array<{ row: number; col: string; severity: FindingSeverity }> = [];
-  if (activeReport) {
-    activeReport.rows.forEach((row, rowIdx) => {
+  if (report) {
+    report.analysisRows.forEach((row, rowIdx) => {
       if (row.chayiHighlight) {
         highlights.push({ row: rowIdx, col: 'chayi', severity: row.chayiHighlight.severity });
         highlights.push({ row: rowIdx, col: 'nabip', severity: row.chayiHighlight.severity });
@@ -66,12 +63,9 @@ export function Step2Validation() {
       if (row.statusHighlight && isTikita) {
         highlights.push({ row: rowIdx, col: 'status', severity: row.statusHighlight.severity });
       }
-      if (row.unpaidHighlight) {
-        highlights.push({ row: rowIdx, col: 'unpaid', severity: row.unpaidHighlight.severity });
-      }
-      for (const [date, cell] of Object.entries(row.attendanceCells)) {
+      for (const cell of row.attendanceCells) {
         if (cell.highlight) {
-          highlights.push({ row: rowIdx, col: date, severity: cell.highlight.severity });
+          highlights.push({ row: rowIdx, col: cell.date, severity: cell.highlight.severity });
         }
       }
     });
@@ -83,23 +77,9 @@ export function Step2Validation() {
         <div className="pr-8">
           {activeCourse && (
             <div className="flex justify-between items-center gap-4 px-5 py-4 bg-gray-900 border border-gray-700 rounded-[10px] mb-4">
-              {isTikita && loadedData.length > 1 ? (
-                <select
-                  className="w-full p-0 text-base font-bold text-white bg-transparent border-none outline-none cursor-pointer appearance-auto [&_option]:bg-gray-900 [&_option]:text-white"
-                  value={selectedCourseIdx}
-                  onChange={(e) => setSelectedCourseIdx(Number(e.target.value))}
-                >
-                  {loadedData.map((cd, idx) => (
-                    <option key={cd.course.id} value={idx}>
-                      {cd.course.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-base font-bold text-white">{activeCourse.course.name}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-base font-bold text-white">{activeCourse.course.name}</span>
+              </div>
               <span className="shrink-0 px-3 py-1 bg-white/10 border border-white/20 rounded-md text-xs font-semibold text-white/80">{isTikita ? '티키타' : 'ACA2000'}</span>
             </div>
           )}
@@ -115,8 +95,7 @@ export function Step2Validation() {
               showDiscountColumn={isTikita}
               courseRule={activeCourse?.rule}
               readOnly={!isTikita}
-              onChange={(studentIdx, field, value) => updateSpreadsheetCell(courseId, studentIdx, field, value)}
-              onAttendanceChange={(studentIdx, date, value) => updateAttendanceCell(courseId, studentIdx, date, value)}
+              onAttendanceChange={(studentIdx, date, value) => updateAttendanceCell(studentIdx, date, value)}
             />
           </div>
           {isTikita && (
@@ -154,20 +133,20 @@ export function Step2Validation() {
 
           <div className="py-5">
             <div className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide mb-3.5">대조 요약</div>
-            {activeReport && (
+            {report && (
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">총 계산 금액</span>
-                  <span className="font-semibold text-gray-900">{activeReport.summary.totalGyesan.toLocaleString()}원</span>
+                  <span className="font-semibold text-gray-900">{report.sueopSummary.expectedTotalAmount.toLocaleString()}원</span>
                 </div>
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">총 납입 금액</span>
-                  <span className="font-semibold text-gray-900">{activeReport.summary.totalNabip.toLocaleString()}원</span>
+                  <span className="font-semibold text-gray-900">{report.sueopSummary.inScope.nabipTotal.toLocaleString()}원</span>
                 </div>
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">총 차이</span>
-                  <span className={activeReport.summary.totalChayi !== 0 ? 'font-semibold text-red-600' : 'font-medium text-emerald-500'}>
-                    {activeReport.summary.totalChayi === 0 ? '일치' : `${activeReport.summary.totalChayi.toLocaleString()}원`}
+                  <span className={report.sueopSummary.totalChayi !== 0 ? 'font-semibold text-red-600' : 'font-medium text-emerald-500'}>
+                    {report.sueopSummary.totalChayi === 0 ? '일치' : `${report.sueopSummary.totalChayi.toLocaleString()}원`}
                   </span>
                 </div>
               </div>

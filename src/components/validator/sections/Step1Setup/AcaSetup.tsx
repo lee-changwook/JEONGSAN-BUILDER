@@ -32,7 +32,6 @@ function generateByDayOfWeek(
 
 export function AcaSetup() {
   const {
-    loadData,
     loadedData,
     queryPeriodStart,
     queryPeriodEnd,
@@ -41,6 +40,8 @@ export function AcaSetup() {
     setQueryPeriod,
     setAcaHoechaSchedule,
     setAcaStudentDiscounts,
+    setLoadedDataFromExcel,
+    updateCourseRule,
   } = useValidatorStore();
   const [uploaded, setUploaded] = useState(false);
   const [hoechaOverflow, setHoechaOverflow] = useState(false);
@@ -52,9 +53,12 @@ export function AcaSetup() {
 
   async function handleFileSelect(file: File) {
     setUploaded(true);
-    loadData();
 
-    const { students, sessionDates, courseMeta } = await parseStudentsFromExcel(file);
+    const { students, sessionDates, courseMeta, courseData } = await parseStudentsFromExcel(file);
+
+    if (courseData) {
+      setLoadedDataFromExcel([courseData]);
+    }
 
     if (students.length > 0) {
       setAcaStudentDiscounts(
@@ -180,7 +184,7 @@ export function AcaSetup() {
                     type="number"
                     placeholder="예: 8"
                     value={parsedSessionCount ?? ''}
-                    onChange={(e) => setParsedSessionCount(Number(e.target.value) || null)}
+                    onChange={(e) => { const v = Number(e.target.value) || null; setParsedSessionCount(v); if (v !== null) updateCourseRule({ totalHoesu: v }); }}
                   />
                 </div>
                 <div className="flex-1 flex flex-col gap-1.5">
@@ -190,7 +194,7 @@ export function AcaSetup() {
                     type="number"
                     placeholder="예: 50000"
                     value={parsedSessionFee ?? ''}
-                    onChange={(e) => setParsedSessionFee(Number(e.target.value) || null)}
+                    onChange={(e) => { const v = Number(e.target.value) || null; setParsedSessionFee(v); if (v !== null) updateCourseRule({ unitPrice: v }); }}
                   />
                 </div>
               </div>
@@ -212,7 +216,7 @@ export function AcaSetup() {
                     type="number"
                     placeholder="예: 30000"
                     value={parsedGyojaeBi ?? ''}
-                    onChange={(e) => setParsedGyojaeBi(Number(e.target.value) || null)}
+                    onChange={(e) => { const v = Number(e.target.value) || null; setParsedGyojaeBi(v); if (v !== null) updateCourseRule({ gyojaeBi: v }); }}
                   />
                 </div>
               </div>

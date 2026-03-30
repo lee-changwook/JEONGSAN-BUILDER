@@ -29,6 +29,9 @@ interface FindingCardCompactProps {
 }
 
 export function FindingCardCompact({ finding, status, isActive, onClick }: FindingCardCompactProps) {
+  const colonIdx = finding.message.indexOf(':');
+  const title = colonIdx > 0 ? finding.message.slice(0, colonIdx).trim() : finding.message;
+
   return (
     <div
       className={cn(
@@ -41,7 +44,7 @@ export function FindingCardCompact({ finding, status, isActive, onClick }: Findi
     >
       <div className={cn('w-2 h-2 rounded-full shrink-0 mt-[5px]', dotColorMap[finding.severity])} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-gray-900 mb-0.5">{finding.studentName}</div>
+        <div className="text-sm font-semibold text-gray-900 mb-0.5">{title}</div>
         <div className="text-[13px] text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis">{finding.message}</div>
       </div>
       <span className={cn('px-1.5 py-0.5 rounded-[10px] text-xs font-semibold shrink-0', statusClassMap[status])}>

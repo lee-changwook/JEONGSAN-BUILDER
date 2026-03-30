@@ -1,8 +1,8 @@
 'use client';
 
 import { type FormEvent, useEffect, useRef } from 'react';
-import { useFileManager } from '@/features/paybuilder/use-file-manager';
-import { useSettlement } from '@/features/paybuilder/use-settlement';
+import { useFileManager } from '@/features/paybuilder/hooks/useFileManager';
+import { useSettlement } from '@/features/paybuilder/hooks/useSettlement';
 import { FlowProgress } from '@/components/paybuilder/FlowProgress';
 import { UploadForm } from '@/components/paybuilder/UploadForm';
 import { SettlementStats } from '@/components/paybuilder/SettlementStats';

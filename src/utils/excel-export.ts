@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
-import type { ValidationFinding, FindingStatus, CourseData } from '@/features/validator/types';
+import type { FindingStatus, CourseData } from '@/features/validator/types';
+import type { ValidationFinding } from '@/aca/domain/sueop/validator';
 
 async function downloadWorkbook(wb: ExcelJS.Workbook, filename: string) {
   const buffer = await wb.xlsx.writeBuffer();
@@ -18,18 +19,17 @@ const severityLabel: Record<string, string> = {
   info: '정보',
 };
 
-const categoryLabel: Record<string, string> = {
-  chulgyeol: '출결',
-  amount: '금액',
-  sunap: '수납',
-  'student-status': '학생상태',
-};
-
 const statusLabel: Record<string, string> = {
   pending: '미처리',
   resolved: '해결',
   'on-hold': '보류',
 };
+
+function serializeEvidence(evidence: Record<string, string | number>): string {
+  return Object.entries(evidence)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+}
 
 export async function exportValidationReport(
   findings: ValidationFinding[],
@@ -61,21 +61,17 @@ export async function exportValidationReport(
   ].forEach((row) => summaryWs.addRow(row));
 
   const detailWs = wb.addWorksheet('상세 결과');
-  detailWs.addRow(['번호', '심각도', '카테고리', '강좌명', '학생명', '내용', '근거', '차이(항목)', '차이(예상)', '차이(실제)', '제안', '처리상태']);
+  detailWs.addRow(['번호', '심각도', '카테고리', '내용', '사유', '근거', '제안', '처리상태']);
   findings.forEach((f, i) => {
     detailWs.addRow([
       i + 1,
       severityLabel[f.severity] ?? f.severity,
-      categoryLabel[f.category] ?? f.category,
-      f.gangjwaName,
-      f.studentName,
+      f.category,
       f.message,
-      f.evidence,
-      f.diff.field,
-      String(f.diff.expected),
-      String(f.diff.actual),
+      f.reason,
+      serializeEvidence(f.evidence),
       f.suggestion,
-      statusLabel[findingStatuses[f.id] ?? f.status] ?? '미처리',
+      statusLabel[findingStatuses[f.id] ?? 'pending'] ?? '미처리',
     ]);
   });
 

@@ -3,17 +3,22 @@ import type {
   DataSource,
   ValidatorStep,
   CourseData,
-  ValidationFinding,
-  FindingStatus,
   CourseRule,
+  FindingStatus,
   StudentRow,
   AttendanceStatus,
 } from '@/features/validator/types';
-import { loadTikitaData } from '@/mocks/tikita-data';
-import { parseAcaExcel } from '@/mocks/aca-data';
-import { computeCourseReport } from '@/features/validator/logic/compute-report';
+import type {
+  SueopAggregateReport,
+  ValidationFinding,
+} from '@/aca/domain/sueop/validator';
+import { loadCourseData } from '@/features/validator/logic/load-data';
 import { makeDates } from '@/mocks/shared-data';
-import type { CourseReport } from '@/features/validator/types';
+import { buildSueopAggregateInput } from '@/features/validator/logic/build-input';
+import {
+  ValidatorStrategyMap,
+  ValidatorIdEnum,
+} from '@/aca/domain/sueop/validator';
 
 interface ValidatorState {
   currentStep: ValidatorStep;
@@ -21,7 +26,6 @@ interface ValidatorState {
   selectedMonth: string;
   selectedGangjwaIds: string[];
   loadedData: CourseData[];
-  findings: ValidationFinding[];
   findingStatuses: Record<string, FindingStatus>;
   acaCourseRule: CourseRule | null;
   acaSpreadsheetData: Record<string, StudentRow[]>;
@@ -29,7 +33,7 @@ interface ValidatorState {
   queryPeriodEnd: string;
   acaHoechaSchedule: string[];
   acaStudentDiscounts: { name: string; school: string; grade: string; parentPhone: string; rate: number; previousUnpaid: number }[];
-  courseReports: CourseReport[];
+  report: SueopAggregateReport | null;
 
   setStep: (step: ValidatorStep) => void;
   setDataSource: (source: DataSource) => void;
@@ -37,11 +41,12 @@ interface ValidatorState {
   loadData: () => void;
   runValidation: () => void;
   setFindingStatus: (findingId: string, status: FindingStatus) => void;
-  updateSpreadsheetCell: (courseId: string, studentIdx: number, field: keyof StudentRow, value: string | number) => void;
-  updateAttendanceCell: (courseId: string, studentIdx: number, date: string, value: AttendanceStatus) => void;
+  updateAttendanceCell: (studentIdx: number, date: string, value: AttendanceStatus) => void;
   setQueryPeriod: (start: string, end: string) => void;
   setAcaHoechaSchedule: (dates: string[]) => void;
-  setAcaStudentDiscounts: (discounts: { name: string; school: string; grade: string; parentPhone: string; rate: number; previousUnpaid: number }[]) => void;
+  setAcaStudentDiscounts: (discounts: ValidatorState['acaStudentDiscounts']) => void;
+  setLoadedDataFromExcel: (data: CourseData[]) => void;
+  updateCourseRule: (patch: Partial<CourseRule>) => void;
   unlockSelection: () => void;
   resetSelection: () => void;
   resetAll: () => void;
@@ -53,15 +58,14 @@ const initialState = {
   selectedMonth: '2026-03',
   selectedGangjwaIds: [] as string[],
   loadedData: [] as CourseData[],
-  findings: [] as ValidationFinding[],
   findingStatuses: {} as Record<string, FindingStatus>,
   acaCourseRule: null as CourseRule | null,
   acaSpreadsheetData: {} as Record<string, StudentRow[]>,
   queryPeriodStart: '2026-03-01',
   queryPeriodEnd: '2026-03-31',
   acaHoechaSchedule: [] as string[],
-  acaStudentDiscounts: [] as { name: string; school: string; grade: string; parentPhone: string; rate: number; previousUnpaid: number }[],
-  courseReports: [] as CourseReport[],
+  acaStudentDiscounts: [] as ValidatorState['acaStudentDiscounts'],
+  report: null as SueopAggregateReport | null,
 };
 
 export const useValidatorStore = create<ValidatorState>()((set, get) => ({
@@ -74,10 +78,9 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
       dataSource: source,
       selectedGangjwaIds: [],
       loadedData: [],
-      findings: [],
       findingStatuses: {},
       acaSpreadsheetData: {},
-      courseReports: [],
+      report: null,
       queryPeriodStart: '2026-03-01',
       queryPeriodEnd: '2026-03-31',
       acaHoechaSchedule: [],
@@ -88,41 +91,62 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
 
   loadData: () => {
     const { dataSource, selectedGangjwaIds } = get();
-    if (dataSource === 'tikita') {
-      const data = loadTikitaData(selectedGangjwaIds);
-      set({ loadedData: data });
-    } else {
-      const data = parseAcaExcel();
-      const spreadsheet: Record<string, StudentRow[]> = {};
-      data.forEach((cd) => {
-        spreadsheet[cd.course.id] = cd.students.map((s) => ({ ...s }));
-      });
-      set({ loadedData: data, acaSpreadsheetData: spreadsheet });
-    }
+    const { loadedData, acaSpreadsheetData } = loadCourseData(dataSource, selectedGangjwaIds);
+    set({ loadedData, acaSpreadsheetData });
   },
 
   runValidation: () => {
-    const { loadedData } = get();
-    const reports = loadedData.map((cd) => {
-      const dates = makeDates(cd.course.dayOfWeek);
-      return computeCourseReport(cd, dates);
+    const state = get();
+    const { dataSource, loadedData, queryPeriodStart, queryPeriodEnd, acaHoechaSchedule, acaStudentDiscounts } = state;
+
+    const firstCourse = loadedData[0];
+    if (!firstCourse) return;
+
+    const validatorId = dataSource === 'tikita'
+      ? ValidatorIdEnum.SUEOP_AGGREGATE_TEACHITA_DEFAULT
+      : ValidatorIdEnum.SUEOP_AGGREGATE_ACA2000_COMPAT;
+
+    const students = firstCourse.students.map((s) => {
+      const discount = acaStudentDiscounts.find((d) => d.name === s.name);
+      return {
+        name: s.name,
+        school: s.school,
+        attendance: s.attendance,
+        nabipAmount: s.nabipAmount,
+        unpaidAmount: s.unpaidAmount,
+        discountRate: discount?.rate ?? s.discount * 100,
+      };
     });
 
-    const allFindings: ValidationFinding[] = reports.flatMap((r) =>
-      r.findings.map((f) => ({
-        ...f,
-        gangjwaName: r.courseName,
-        diff: { field: '', expected: 0, actual: 0 },
-        status: 'pending' as FindingStatus,
-      })),
-    );
+    const dates = dataSource === 'aca2000'
+      ? acaHoechaSchedule
+      : makeDates(firstCourse.course.dayOfWeek);
 
+    const input = buildSueopAggregateInput({
+      queryPeriodStart,
+      queryPeriodEnd,
+      courseName: firstCourse.course.name,
+      sessionAmount: firstCourse.rule.unitPrice,
+      textbookAmount: firstCourse.rule.gyojaeBi,
+      hoechaSchedule: dates,
+      students,
+    });
+
+    const validator = ValidatorStrategyMap[validatorId];
+    const result = validator.run(input);
+
+    if (!result.success) {
+      console.error('Validator input check failed:', result);
+      return;
+    }
+
+    const report = result.payload;
     const statuses: Record<string, FindingStatus> = {};
-    allFindings.forEach((f) => {
-      statuses[f.id] = 'pending';
+    report.findings.forEach((f) => {
+      statuses[f.id] = state.findingStatuses[f.id] ?? 'pending';
     });
 
-    set({ courseReports: reports, findings: allFindings, findingStatuses: statuses });
+    set({ report, findingStatuses: statuses });
   },
 
   setFindingStatus: (findingId, status) =>
@@ -130,52 +154,12 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
       findingStatuses: { ...state.findingStatuses, [findingId]: status },
     })),
 
-  updateSpreadsheetCell: (courseId, studentIdx, field, value) => {
+  updateAttendanceCell: (studentIdx, date, value) => {
     const state = get();
-    const courseIdx = state.loadedData.findIndex((cd) => cd.course.id === courseId);
-    if (courseIdx < 0) return;
-
+    const courseIdx = 0;
     const course = state.loadedData[courseIdx];
-    const updatedStudents = [...course.students];
-    updatedStudents[studentIdx] = { ...updatedStudents[studentIdx], [field]: value };
+    if (!course) return;
 
-    const updatedCourse = { ...course, students: updatedStudents };
-    const updatedLoadedData = [...state.loadedData];
-    updatedLoadedData[courseIdx] = updatedCourse;
-
-    const dates = makeDates(updatedCourse.course.dayOfWeek);
-    const newReport = computeCourseReport(updatedCourse, dates);
-    const updatedReports = [...state.courseReports];
-    const reportIdx = updatedReports.findIndex((r) => r.courseId === courseId);
-    if (reportIdx >= 0) updatedReports[reportIdx] = newReport;
-
-    const allFindings: ValidationFinding[] = updatedReports.flatMap((r) =>
-      r.findings.map((f) => ({
-        ...f,
-        gangjwaName: r.courseName,
-        diff: { field: '', expected: 0, actual: 0 },
-        status: 'pending' as FindingStatus,
-      })),
-    );
-    const statuses: Record<string, FindingStatus> = {};
-    allFindings.forEach((f) => {
-      statuses[f.id] = state.findingStatuses[f.id] ?? 'pending';
-    });
-
-    set({
-      loadedData: updatedLoadedData,
-      courseReports: updatedReports,
-      findings: allFindings,
-      findingStatuses: statuses,
-    });
-  },
-
-  updateAttendanceCell: (courseId, studentIdx, date, value) => {
-    const state = get();
-    const courseIdx = state.loadedData.findIndex((cd) => cd.course.id === courseId);
-    if (courseIdx < 0) return;
-
-    const course = state.loadedData[courseIdx];
     const updatedStudents = [...course.students];
     updatedStudents[studentIdx] = {
       ...updatedStudents[studentIdx],
@@ -186,56 +170,45 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
     const updatedLoadedData = [...state.loadedData];
     updatedLoadedData[courseIdx] = updatedCourse;
 
-    const dates = makeDates(updatedCourse.course.dayOfWeek);
-    const newReport = computeCourseReport(updatedCourse, dates);
-    const updatedReports = [...state.courseReports];
-    const reportIdx = updatedReports.findIndex((r) => r.courseId === courseId);
-    if (reportIdx >= 0) updatedReports[reportIdx] = newReport;
-
-    const allFindings: ValidationFinding[] = updatedReports.flatMap((r) =>
-      r.findings.map((f) => ({
-        ...f,
-        gangjwaName: r.courseName,
-        diff: { field: '', expected: 0, actual: 0 },
-        status: 'pending' as FindingStatus,
-      })),
-    );
-    const statuses: Record<string, FindingStatus> = {};
-    allFindings.forEach((f) => {
-      statuses[f.id] = state.findingStatuses[f.id] ?? 'pending';
-    });
-
-    set({
-      loadedData: updatedLoadedData,
-      courseReports: updatedReports,
-      findings: allFindings,
-      findingStatuses: statuses,
-    });
+    set({ loadedData: updatedLoadedData });
   },
 
   setQueryPeriod: (start, end) => set({ queryPeriodStart: start, queryPeriodEnd: end }),
-
   setAcaHoechaSchedule: (dates) => set({ acaHoechaSchedule: dates }),
-
   setAcaStudentDiscounts: (discounts) => set({ acaStudentDiscounts: discounts }),
+
+  setLoadedDataFromExcel: (data) => {
+    const spreadsheet: Record<string, StudentRow[]> = {};
+    data.forEach((cd) => {
+      spreadsheet[cd.course.id] = cd.students.map((s) => ({ ...s }));
+    });
+    set({ loadedData: data, acaSpreadsheetData: spreadsheet });
+  },
+
+  updateCourseRule: (patch) => {
+    const state = get();
+    const first = state.loadedData[0];
+    if (!first) return;
+    const updated = { ...first, rule: { ...first.rule, ...patch } };
+    const newLoadedData = [updated, ...state.loadedData.slice(1)];
+    set({ loadedData: newLoadedData });
+  },
 
   unlockSelection: () =>
     set({
       loadedData: [],
-      findings: [],
       findingStatuses: {},
       acaSpreadsheetData: {},
-      courseReports: [],
+      report: null,
     }),
 
   resetSelection: () =>
     set({
       selectedGangjwaIds: [],
       loadedData: [],
-      findings: [],
       findingStatuses: {},
       acaSpreadsheetData: {},
-      courseReports: [],
+      report: null,
     }),
 
   resetAll: () => set(initialState),
