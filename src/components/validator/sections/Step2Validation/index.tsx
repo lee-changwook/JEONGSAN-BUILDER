@@ -27,6 +27,8 @@ export function Step2Validation() {
     ? (isTikita ? makeDates(activeCourse.course.dayOfWeek) : activeCourse.rule.hoechaSchedule)
     : [];
 
+  const conductedCount = dates.filter((d) => students.some((s) => s.attendance[d] != null)).length;
+
   const errorCount = report?.summary.errorCount ?? 0;
   const warningCount = report?.summary.warningCount ?? 0;
   const issueStudentNames = new Set(
@@ -36,7 +38,7 @@ export function Step2Validation() {
   );
   const normalCount = (report?.analysisRows.length ?? 0) - issueStudentNames.size;
 
-  const rowFindingsMap: Record<number, Array<{ id: string; severity: FindingSeverity; message: string; suggestion: string }>> = {};
+  const rowFindingsMap: Record<number, Array<{ id: string; severity: FindingSeverity; message: string; reason: string; suggestion: string }>> = {};
   if (report) {
     report.analysisRows.forEach((row, rowIdx) => {
       const pending = row.findings.filter(
@@ -47,6 +49,7 @@ export function Step2Validation() {
           id: f.id,
           severity: f.severity,
           message: f.message,
+          reason: f.reason,
           suggestion: f.suggestion,
         }));
       }
@@ -85,7 +88,7 @@ export function Step2Validation() {
                 <span className="w-px h-3 bg-white/20" />
                 <span className="font-normal text-white/60">
                   {isTikita
-                    ? '출결·할인율·재원을 클릭하여 수정 가능'
+                    ? '출결·할인율을 클릭하여 수정 가능'
                     : 'ACA2000에서 데이터를 수정하세요'}
                 </span>
               </span>
@@ -159,7 +162,7 @@ export function Step2Validation() {
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">기대 납입금</span>
-                  <span className="font-semibold text-gray-900">{(activeCourse.rule.totalHoesu * activeCourse.rule.unitPrice + activeCourse.rule.gyojaeBi).toLocaleString()}원</span>
+                  <span className="font-semibold text-gray-900">{(conductedCount * activeCourse.rule.unitPrice + activeCourse.rule.gyojaeBi).toLocaleString()}원</span>
                 </div>
                 {isTikita && (
                   <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
@@ -169,7 +172,7 @@ export function Step2Validation() {
                 )}
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">출결수</span>
-                  <span className="font-semibold text-gray-900">{activeCourse.rule.totalHoesu}회 기준</span>
+                  <span className="font-semibold text-gray-900">{conductedCount}회 / {activeCourse.rule.totalHoesu}회</span>
                 </div>
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">교재비 포함 여부</span>

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import { ErrorFallback } from '@/components/common/ErrorFallback';
 import { cn } from '@/lib/utils';
 import { FileUpload } from '@/components/validator/FileUpload';
 import { useValidatorStore } from '@/store/validator-store';
@@ -165,7 +167,9 @@ export function AcaSetup() {
           <span className="w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center text-[13px] font-semibold shrink-0">2</span>
           ACA2000 출결 현황 엑셀
         </div>
-        <FileUpload onFileSelect={handleFileSelect} />
+        <ErrorBoundary FallbackComponent={ErrorFallback}>
+          <FileUpload onFileSelect={handleFileSelect} />
+        </ErrorBoundary>
       </div>
 
       {uploaded && firstCourse && (

@@ -13,7 +13,17 @@ export function FileUpload({ onFileSelect, accepted }: FileUploadProps) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const allowedExtensions = (accepted ?? '.xlsx,.xls')
+    .split(',')
+    .map((ext) => ext.trim().toLowerCase());
+
+  function isAcceptedFile(f: File): boolean {
+    const name = f.name.toLowerCase();
+    return allowedExtensions.some((ext) => name.endsWith(ext));
+  }
+
   function handleFile(f: File) {
+    if (!isAcceptedFile(f)) return;
     setFile(f);
     onFileSelect(f);
   }

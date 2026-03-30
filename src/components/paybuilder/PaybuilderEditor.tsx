@@ -1,6 +1,8 @@
 'use client';
 
-import { type FormEvent, useEffect, useRef } from 'react';
+import { type FormEvent, Suspense, useEffect, useRef } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import { ErrorFallback } from '@/components/common/ErrorFallback';
 import { useFileManager } from '@/features/paybuilder/hooks/useFileManager';
 import { useSettlement } from '@/features/paybuilder/hooks/useSettlement';
 import { FlowProgress } from '@/components/paybuilder/FlowProgress';
@@ -138,31 +140,41 @@ export function PaybuilderEditor() {
               </div>
             </div>
 
-            <div className="grid gap-5 grid-cols-[240px_minmax(0,1fr)]">
-              <CourseList
-                courses={settlement.courses}
-                selectedCourseId={selectedCourseId}
-                onSelect={setSelectedCourseId}
-              />
+            <ErrorBoundary FallbackComponent={ErrorFallback}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-20">
+                    <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+                  </div>
+                }
+              >
+                <div className="grid gap-5 grid-cols-[240px_minmax(0,1fr)]">
+                  <CourseList
+                    courses={settlement.courses}
+                    selectedCourseId={selectedCourseId}
+                    onSelect={setSelectedCourseId}
+                  />
 
-              {selectedCourse ? (
-                <div className="grid gap-4 content-start">
-                  <CourseDetail
-                    course={selectedCourse}
-                    onUpdate={(updater) => updateCourse(selectedCourse.id, updater)}
-                  />
-                  <StudentTable
-                    course={selectedCourse}
-                    feeRate={feeRate}
-                    onUpdateStudent={(studentId, updater) =>
-                      updateStudent(selectedCourse.id, studentId, updater)
-                    }
-                    onRemoveStudent={(studentId) => removeStudent(selectedCourse.id, studentId)}
-                    onAddStudent={() => addStudent(selectedCourse.id)}
-                  />
+                  {selectedCourse ? (
+                    <div className="grid gap-4 content-start">
+                      <CourseDetail
+                        course={selectedCourse}
+                        onUpdate={(updater) => updateCourse(selectedCourse.id, updater)}
+                      />
+                      <StudentTable
+                        course={selectedCourse}
+                        feeRate={feeRate}
+                        onUpdateStudent={(studentId, updater) =>
+                          updateStudent(selectedCourse.id, studentId, updater)
+                        }
+                        onRemoveStudent={(studentId) => removeStudent(selectedCourse.id, studentId)}
+                        onAddStudent={() => addStudent(selectedCourse.id)}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </Suspense>
+            </ErrorBoundary>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center min-h-[400px] gap-3 text-gray-400 text-sm">

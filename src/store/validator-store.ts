@@ -118,9 +118,12 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
       };
     });
 
-    const dates = dataSource === 'aca2000'
+    const allDates = dataSource === 'aca2000'
       ? acaHoechaSchedule
       : makeDates(firstCourse.course.dayOfWeek);
+
+    const conductedDates = allDates.filter((d) => students.some((s) => s.attendance[d] != null));
+    const dates = conductedDates.length > 0 ? conductedDates : allDates;
 
     const input = buildSueopAggregateInput({
       queryPeriodStart,

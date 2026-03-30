@@ -90,7 +90,8 @@ export function Step1Setup({ onNext }: Step1SetupProps) {
           {isTikita ? <TikitaSetup /> : <AcaSetup />}
         </div>
 
-        <div className="fixed top-[156px] right-[max(40px,calc((100vw-1280px)/2+40px))] w-[280px] border-l border-gray-200 pl-7 max-h-[calc(100vh-180px)] overflow-y-auto pb-6">
+        <div className="fixed top-[156px] right-[max(40px,calc((100vw-1280px)/2+40px))] w-[280px] border-l border-gray-200 pl-7 max-h-[calc(100vh-180px)] overflow-y-auto pb-6 pointer-events-none">
+          <div className="pointer-events-auto">
           <div className="mb-7">
             <div className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide mb-3.5">선택한 옵션</div>
             <div className="flex flex-col gap-0.5">
@@ -152,6 +153,7 @@ export function Step1Setup({ onNext }: Step1SetupProps) {
           >
             대조 실행 →
           </button>
+          </div>
         </div>
       </div>
     </>

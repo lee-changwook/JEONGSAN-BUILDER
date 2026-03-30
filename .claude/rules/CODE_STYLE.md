@@ -1,16 +1,5 @@
 # Code Style Rules
 
-## Summary
-
-1. **No comments in new/modified TypeScript code** - explain in conversation, not in code
-2. **No `.passthrough()` in Zod schemas** - define only spec-defined fields
-3. **No Memoization Hooks in React 19 Codes** - must not add useCallback, useMemo and React.memo in components.
-4. **All API endpoints use `/T/dl/`, `/T/feat/`, or `/A/` prefix** (`/A/` is for academy app APIs)
-5. **Korean naming with Romanization** is common in domain concepts (e.g., juso, jojik, sugangsaeng, bohoja)
-6. **Separate CSS styles into `style.ts` files** - never write CSS in `.tsx` files. Never use inline `style={{}}`
-7. **Use `src/ds/components` design system for `src/app/td/acap` pages** - When writing page code under `src/app/td/acap/`, actively use the design system components from `src/ds/components/` (Button, Input, Dropdown, Toggle, Label, Grid, ClassGroupPanel, ClassListPanel, Search, FilterTrigger, SortTrigger, Segment, Table, Icon, Modal, Textarea, etc.) instead of creating custom UI elements
-8. **Use `src/ds-tm/components` design system for `src/app/tm/acap` pages** - When writing mobile page code under `src/app/tm/acap/`, use the mobile design system components from `src/ds-tm/components/` instead of desktop DS or custom UI elements
-
 ## Declarative Programming
 
 - 페이지 단위 로딩 상태는 `app/[page-name]/loading.tsx`를 생성하여 핸들링합니다.
@@ -30,7 +19,7 @@
 
 ## Path Aliases
 
-`@/*` maps to `./src/*`
+import는 반드시 절대 경로를 사용합니다.
 
 ## Code Verification Checklist
 

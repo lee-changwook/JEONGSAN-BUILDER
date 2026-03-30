@@ -245,10 +245,20 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
   const courseMeta = extractCourseMeta(headerRaw);
 
   if (courseMeta.sessionCount === null && sessionDates.length > 0) {
-    courseMeta.sessionCount = sessionDates.length;
+    let conducted = 0;
+    for (let di = 0; di < sessionDates.length; di += 1) {
+      const col = dateColIndices[di];
+      const hasAny = studentRows.some((s) => {
+        const date = sessionDates[di];
+        return s.attendance[date] != null;
+      });
+      if (hasAny) conducted += 1;
+    }
+    courseMeta.sessionCount = conducted > 0 ? conducted : sessionDates.length;
   }
 
   if (courseMeta.sessionFee === null && paidUnpaidColIdx > 0 && sessionDates.length > 0) {
+    const candidates: Array<{ fee: number; attendCount: number; exact: boolean }> = [];
     for (let rowIdx = 8; rowIdx <= ws.rowCount; rowIdx += 1) {
       const row = ws.getRow(rowIdx);
       const nameVal = cellString(row.getCell(nameColIdx).value).trim();
@@ -266,10 +276,14 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
           if (marker === '출' || marker === '지') attendCount += 1;
         }
         if (attendCount > 0) {
-          courseMeta.sessionFee = Math.round(paidAmount / attendCount);
-          break;
+          const exact = paidAmount % attendCount === 0;
+          candidates.push({ fee: exact ? paidAmount / attendCount : Math.round(paidAmount / attendCount), attendCount, exact });
         }
       }
+    }
+    if (candidates.length > 0) {
+      const exact = candidates.find((c) => c.exact);
+      courseMeta.sessionFee = exact ? exact.fee : candidates.reduce((a, b) => (a.attendCount >= b.attendCount ? a : b)).fee;
     }
   }
 

@@ -57,6 +57,7 @@ export interface RowFinding {
   id: string;
   severity: FindingSeverity;
   message: string;
+  reason: string;
   suggestion: string;
 }
 
@@ -97,6 +98,8 @@ export function Spreadsheet({
   showDiscountColumn = false,
   courseRule,
 }: SpreadsheetProps) {
+  const conductedCount = dates.filter((d) => students.some((s) => s.attendance[d] != null)).length;
+
   const [editing, setEditing] = useState<{ row: number; col: string } | null>(null);
   const [modifiedCells, setModifiedCells] = useState<Set<string>>(new Set());
   const [openTooltipRow, setOpenTooltipRow] = useState<number | null>(null);
@@ -172,9 +175,6 @@ export function Spreadsheet({
                 할인
               </th>
             )}
-            <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20">
-              미납금
-            </th>
             {showStatusColumn && (
               <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-12 min-w-12 max-w-12">
                 재원
@@ -212,9 +212,10 @@ export function Spreadsheet({
           {students.map((student, rowIdx) => {
             const presentCount = countPresent(student.attendance);
             const totalFee = courseRule
-              ? Math.round((courseRule.unitPrice * courseRule.totalHoesu + courseRule.gyojaeBi) * (1 - student.discount))
+              ? Math.round((courseRule.unitPrice * conductedCount + courseRule.gyojaeBi) * (1 - student.discount))
               : student.computedAmount;
-            const diff = (student.unpaidAmount + student.nabipAmount) - totalFee;
+            const rawDiff = (student.unpaidAmount + student.nabipAmount) - totalFee;
+            const diff = Math.abs(rawDiff) <= 1 ? 0 : rawDiff;
 
             return (
               <tr key={student.name}>
@@ -255,7 +256,7 @@ export function Spreadsheet({
                         </button>
                         {openTooltipRow === rowIdx && tooltipPos && (
                           <div
-                            className="fixed z-[1000] w-[280px] p-3.5 bg-white border border-gray-200 rounded-[10px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] flex flex-col gap-2.5"
+                            className="fixed z-[1000] w-[280px] p-3.5 bg-white border border-gray-200 rounded-[10px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] flex flex-col gap-4"
                             style={
                               tooltipPos.above
                                 ? { bottom: window.innerHeight - tooltipPos.top + 8, left: tooltipPos.left, top: 'auto' }
@@ -266,40 +267,19 @@ export function Spreadsheet({
                               'absolute left-3.5 w-2.5 h-2.5 bg-white border-l border-t border-gray-200',
                               tooltipPos.above ? 'bottom-[-6px] rotate-[225deg]' : 'top-[-6px] rotate-45',
                             )} />
-                            {courseRule && (
-                              <div className="flex flex-col gap-1 px-2.5 py-2 bg-gray-50 rounded-md border border-gray-100">
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="text-gray-500">기대 납입금</span>
-                                  <span className="font-semibold text-gray-900">
-                                    {formatNumber(totalFee)}원
-                                  </span>
-                                </div>
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="text-gray-500">실제 납입금</span>
-                                  <span className={diff !== 0 ? 'font-bold text-red-600' : 'font-semibold text-gray-900'}>
-                                    {formatNumber(student.nabipAmount)}원
-                                  </span>
-                                </div>
-                                {diff !== 0 && (
-                                  <div className="flex justify-between items-center text-xs">
-                                    <span className="text-gray-500">차이</span>
-                                    <span className="font-bold text-red-600">
-                                      {diff > 0 ? '+' : ''}{formatNumber(diff)}원
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
                             {rowFindings[rowIdx].map((f) => (
-                              <div key={f.id} className="flex flex-col gap-1">
-                                <span className={cn(
-                                  'text-[11px] font-semibold px-1.5 py-px rounded',
-                                  f.severity === 'error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600',
-                                )}>
-                                  {f.severity === 'error' ? '에러' : '경고'}
-                                </span>
-                                <div className="text-xs text-gray-700 leading-normal">{f.message}</div>
-                                <div className="text-[11px] text-gray-500 leading-snug">{f.suggestion}</div>
+                              <div key={f.id} className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={cn(
+                                    'text-[11px] font-semibold px-1.5 py-px rounded shrink-0',
+                                    f.severity === 'error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600',
+                                  )}>
+                                    {f.severity === 'error' ? '에러' : '경고'}
+                                  </span>
+                                  <span className="text-xs font-medium text-gray-800 leading-tight">{f.message}</span>
+                                </div>
+                                {f.reason && <div className="text-[11px] text-gray-500 leading-snug pl-0.5">{f.reason}</div>}
+                                <div className="text-[11px] text-gray-400 leading-snug pl-0.5">{f.suggestion}</div>
                               </div>
                             ))}
                           </div>
@@ -366,26 +346,8 @@ export function Spreadsheet({
                     )}
                   </td>
                 )}
-                <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
-                  <span className={student.unpaidAmount > 0 ? 'font-bold text-red-600' : undefined}>
-                    {student.unpaidAmount > 0 ? formatNumber(student.unpaidAmount) : '0'}
-                  </span>
-                </td>
                 {showStatusColumn && (
-                  <td
-                    className={cn(
-                      'px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap',
-                      !readOnly && 'cursor-pointer',
-                      isModified(rowIdx, 'status') && 'outline-2 outline-amber-600 -outline-offset-1',
-                    )}
-                    onContextMenu={(e) => {
-                      if (readOnly) return;
-                      e.preventDefault();
-                      const next = rotateStudentStatus(student.status);
-                      onChange?.(rowIdx, 'status', next);
-                      toggleModified(rowIdx, 'status', next);
-                    }}
-                  >
+                  <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
                     <span className={student.status === 'active' ? 'text-emerald-500 font-semibold' : 'text-[13px] font-medium text-gray-700'}>
                       {statusLabels[student.status]}
                     </span>

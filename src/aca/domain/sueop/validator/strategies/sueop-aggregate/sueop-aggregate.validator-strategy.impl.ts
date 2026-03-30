@@ -50,7 +50,8 @@ function buildAnalysisRow(
 
   const gyesanAmount = sessionAmount * totalBoons + gyojaeBi;
   const discountedGyesan = totalHarin > 0 ? gyesanAmount - totalHarin : gyesanAmount;
-  const chayi = nabipAmount - discountedGyesan;
+  const rawChayi = nabipAmount - discountedGyesan;
+  const chayi = Math.abs(rawChayi) <= 1 ? 0 : rawChayi;
 
   let chayiHighlight: CellHighlight | null = null;
   if (chayi !== 0) {
@@ -206,7 +207,7 @@ function generateFindings(
           addFinding(
             'warning',
             'anomaly',
-            `납입액이 다른 학생 대비 이상치입니다`,
+            `납입액이 다른 학생 대비 비정상적입니다`,
             `납입: ${row.nabipAmount.toLocaleString()}원 / 평균: ${Math.round(mean).toLocaleString()}원 (z=${zScore.toFixed(1)})`,
             { nabipAmount: row.nabipAmount, mean: Math.round(mean), zScore: parseFloat(zScore.toFixed(1)) },
             '납입 금액을 재확인하세요',
@@ -227,8 +228,7 @@ function generateFindings(
 }
 
 export class SueopAggregateValidatorStrategy
-  implements ValidatorStrategy<SueopAggregateInput, SueopAggregateReport>
-{
+  implements ValidatorStrategy<SueopAggregateInput, SueopAggregateReport> {
   id: string;
 
   constructor(id: string) {
