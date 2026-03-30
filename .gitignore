@@ -1,41 +1,56 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Node/Next
+node_modules/
+.next/
+out/
+dist/
+.next/cache/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# Env & secrets
+.env
+.env.*
+!.env.example
+next-env.d.ts
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
+logs/
+*.log
 
-# env files (can opt-in for committing if needed)
-.env*
+# Testing/coverage
+coverage/
+playwright-report/
+test-results/
+.playwright/
 
-# vercel
-.vercel
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 
-# typescript
-*.tsbuildinfo
+# Builds/temp
+build/
+tmp/
 next-env.d.ts
+
+# AI (클로드 references: 업로드 가능하지 확인 필요 / plans: 개인별로 사용할 디렉토리)
+.claude/references/
+.claude/plans/
+.cursor/
+.sisyphus/
+.mcp.json
+opencode.jsonc
+
+# TypeScript Build Info
+tsconfig.tsbuildinfo
+next-env.d.ts
+.tmp/
+
+# Sentry Config File
+.env.sentry-build-plugin
+
+# Etc.
+apidocs*

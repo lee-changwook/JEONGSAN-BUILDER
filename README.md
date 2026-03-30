@@ -1,36 +1,14 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SETTLA
 
-## Getting Started
+티키타(TEACHITA)의 학원 정산 시스템
 
-First, run the development server:
+## 개요
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+학원 현장의 정산 업무를 자동화하는 시스템입니다. 기존에 수작업으로 2일 이상 걸리던 Pay 작업을 2시간으로 단축하고, 출결-청구 데이터 불일치를 자동으로 탐지합니다.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 핵심 기능
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **출결 대조 자동화** — 출결 vs 청구 데이터를 자동 비교하여 불일치 건만 표시
+- **Pay 문서 생성** — 대조 완료된 강좌만 Pay 문서에 포함 (미완료 강좌는 차단)
+- **강사 급여 자동 계산** — 강좌별 지분율 적용, 조교비 공제, 세제 3.3% 자동 계산
+- **엑셀 다운로드** — 검증된 정산 데이터를 엑셀로 내보내기

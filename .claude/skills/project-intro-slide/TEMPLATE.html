@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{상위_브랜드}} : {{프로젝트명}}</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+    />
+    <style>
+      /* ══════════════════════════════════════════════
+         TEACHITA Slide Design System
+         원본: SETTLA_DEMO_INTRO.html (2026.03.26)
+         ══════════════════════════════════════════════ */
+
+      :root {
+        /* ── Brand Colors ── */
+        --blue: #5f83ff;
+        --blue600: #4c69cc;
+        --blue400: #859fff;
+        --blue200: #d6dfff;
+        --blue100: #ebefff;
+        --blue50: #f5f8ff;
+        --purple: #854dff;
+        --purple10: #f3edff;
+        --red: #ff5226;
+        --red10: #ffe7e1;
+        --success: #059669;
+        --success-light: #ecfdf5;
+        --warning: #d97706;
+        --warning-light: #fffbeb;
+
+        /* ── Neutral Colors ── */
+        --dark: #111827;
+        --gray: #6b7280;
+        --gray-light: #9ca3af;
+        --bg: #f8f9fb;
+        --surface: #ffffff;
+        --surface-alt: #f3f4f6;
+        --border: #e5e7eb;
+
+        /* ── Fonts ── */
+        --font-sans: 'Pretendard Variable', 'Pretendard', -apple-system,
+          BlinkMacSystemFont, system-ui, sans-serif;
+        --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        font-family: var(--font-sans);
+        background: #1a1a2e;
+        color: var(--dark);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Slide Container ── */
+      .slide-deck {
+        width: 100%; height: 100vh;
+        overflow: hidden; position: relative;
+      }
+      .slide {
+        width: 960px; height: 540px;
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%) scale(var(--slide-scale, 1));
+        background: var(--surface);
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden; display: none;
+        padding: 48px 56px;
+      }
+      .slide.active { display: flex; flex-direction: column; }
+
+      /* ── Print ── */
+      @media print {
+        body { background: white; }
+        .slide-deck { height: auto; overflow: visible; }
+        .slide {
+          position: relative; top: auto; left: auto; transform: none;
+          display: flex !important; page-break-after: always;
+          box-shadow: none; border-radius: 0; margin: 0 auto;
+        }
+        .slide-nav, .slide-progress { display: none !important; }
+      }
+
+      /* ── Navigation ── */
+      .slide-nav {
+        position: fixed; bottom: 24px; left: 50%;
+        transform: translateX(-50%);
+        display: flex; gap: 8px; z-index: 100;
+      }
+      .slide-nav button {
+        width: 10px; height: 10px; border-radius: 50%;
+        border: none; background: rgba(255, 255, 255, 0.3);
+        cursor: pointer; transition: all 0.2s;
+      }
+      .slide-nav button.active {
+        background: var(--blue); width: 28px; border-radius: 5px;
+      }
+      .slide-progress {
+        position: fixed; top: 0; left: 0; height: 3px;
+        background: var(--blue); transition: width 0.3s ease; z-index: 100;
+      }
+
+      /* ── Typography ── */
+      .slide-label {
+        font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+        text-transform: uppercase; color: var(--gray); margin-bottom: 8px;
+      }
+      .slide-title {
+        font-size: 32px; font-weight: 800; letter-spacing: -0.8px;
+        line-height: 1.2; color: var(--dark);
+      }
+      .slide-subtitle {
+        font-size: 15px; color: var(--gray); line-height: 1.6; margin-top: 8px;
+      }
+      .mono { font-family: var(--font-mono); letter-spacing: -0.3px; }
+
+      /* ── Pill Badges ── */
+      .pill {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 11px; font-weight: 600; white-space: nowrap;
+      }
+      .pill.blue    { background: var(--blue100); color: var(--blue); }
+      .pill.purple  { background: var(--purple10); color: var(--purple); }
+      .pill.red     { background: var(--red10); color: var(--red); }
+      .pill.success { background: var(--success-light); color: var(--success); }
+      .pill.warning { background: var(--warning-light); color: var(--warning); }
+      .pill.dark    { background: var(--dark); color: #fff; }
+      .pill.blue-fill   { background: var(--blue); color: #fff; }
+      .pill.red-fill    { background: var(--red); color: #fff; }
+      .pill.purple-fill { background: var(--purple); color: #fff; }
+
+      /* ── KPI Cards ── */
+      .kpi-row { display: grid; gap: 12px; }
+      .kpi-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px 16px;
+      }
+      .kpi-card .label {
+        font-size: 11px; color: var(--gray);
+        display: flex; align-items: center; gap: 5px; margin-bottom: 6px;
+      }
+      .kpi-card .label .dot { width: 7px; height: 7px; border-radius: 50%; }
+      .kpi-card .value {
+        font-family: var(--font-mono); font-size: 22px;
+        font-weight: 700; letter-spacing: -0.5px;
+      }
+      .kpi-card .sub {
+        font-size: 10px; color: var(--gray-light);
+        margin-top: 2px; font-family: var(--font-mono);
+      }
+
+      /* ── Card Box ── */
+      .card-box {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 10px; padding: 20px;
+      }
+
+      /* ── Flow Steps ── */
+      .flow-step { text-align: center; flex: 1; position: relative; }
+      .flow-num {
+        width: 36px; height: 36px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: #fff; font-size: 16px; font-weight: 700; margin-bottom: 8px;
+      }
+      .flow-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+      .flow-role  { margin-bottom: 6px; }
+      .flow-desc  { font-size: 10px; color: var(--gray); line-height: 1.5; }
+      .flow-arrow {
+        position: absolute; right: -14px; top: 18px;
+        color: var(--border); font-size: 18px;
+      }
+
+      /* ── Mini Table ── */
+      .mini-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      .mini-table thead th {
+        padding: 6px 10px; background: var(--surface-alt);
+        border-bottom: 1px solid var(--border);
+        font-weight: 600; color: var(--gray); text-align: left; font-size: 10px;
+      }
+      .mini-table tbody td {
+        padding: 7px 10px; border-bottom: 1px solid #f0f1f3; color: var(--dark);
+      }
+      .mini-table .mono { font-family: var(--font-mono); font-size: 11px; }
+      .mini-table .right { text-align: right; }
+
+      /* ── Summary Box ── */
+      .summary-box { border: 2px solid var(--dark); border-radius: 10px; padding: 16px 20px; }
+      .summary-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+      .summary-line .label { color: var(--gray); }
+      .summary-line .val { font-family: var(--font-mono); font-weight: 600; }
+      .summary-line.deduct .val { color: var(--red); }
+      .summary-line.total {
+        border-top: 2px solid var(--dark); margin-top: 8px;
+        padding-top: 10px; font-size: 15px;
+      }
+      .summary-line.total .label { font-weight: 700; color: var(--dark); }
+      .summary-line.total .val { font-size: 20px; font-weight: 800; color: var(--blue); }
+
+      /* ── Excel Mock ── */
+      .excel-mock { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 9px; }
+      .excel-mock .header-row { background: #dce1f0; display: grid; font-weight: 600; color: var(--dark); }
+      .excel-mock .data-row { display: grid; border-top: 1px solid #eee; }
+      .excel-mock .data-row:nth-child(even) { background: #fafbfc; }
+      .excel-mock .cell { padding: 5px 6px; text-align: center; border-right: 1px solid #eee; }
+      .excel-mock .cell:last-child { border-right: none; }
+
+      /* ── Two Column Layout ── */
+      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; }
+
+      /* ── Slide Decorations ── */
+      .accent-bar { position: absolute; left: 0; top: 0; width: 5px; height: 100%; }
+      .slide-number {
+        position: absolute; bottom: 16px; right: 24px;
+        font-size: 11px; color: var(--gray-light);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="slide-deck" id="deck">
+
+      <!-- ═══════════════════════════════════════════
+           여기에 슬라이드를 추가한다.
+           SLIDE-GUIDE.md의 패턴을 참고하여 작성.
+           ═══════════════════════════════════════════ -->
+
+    </div>
+
+    <!-- Progress bar -->
+    <div class="slide-progress" id="progress"></div>
+
+    <!-- Navigation dots -->
+    <div class="slide-nav" id="nav"></div>
+
+    <script>
+      const slides = document.querySelectorAll('.slide');
+      const nav = document.getElementById('nav');
+      const progress = document.getElementById('progress');
+      let current = 0;
+
+      // Create nav dots
+      slides.forEach((_, i) => {
+        const btn = document.createElement('button');
+        btn.addEventListener('click', () => goTo(i));
+        nav.appendChild(btn);
+      });
+
+      function goTo(n) {
+        slides[current].classList.remove('active');
+        current = Math.max(0, Math.min(n, slides.length - 1));
+        slides[current].classList.add('active');
+        nav.querySelectorAll('button').forEach((b, i) =>
+          b.classList.toggle('active', i === current)
+        );
+        progress.style.width = ((current + 1) / slides.length) * 100 + '%';
+      }
+
+      // Keyboard navigation
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault(); goTo(current + 1);
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+          e.preventDefault(); goTo(current - 1);
+        }
+        if (e.key === 'Home') goTo(0);
+        if (e.key === 'End') goTo(slides.length - 1);
+      });
+
+      // Click navigation (left half = prev, right half = next)
+      document.querySelector('.slide-deck').addEventListener('click', (e) => {
+        if (e.target.closest('.slide-nav')) return;
+        if (e.clientX < window.innerWidth / 2) goTo(current - 1);
+        else goTo(current + 1);
+      });
+
+      goTo(0);
+
+      // Auto-scale: fill viewport
+      function fitSlides() {
+        var pad = 160;
+        var sx = (window.innerWidth - pad) / 960;
+        var sy = (window.innerHeight - pad) / 540;
+        var s = Math.min(sx, sy, 2);
+        document.documentElement.style.setProperty('--slide-scale', s);
+      }
+      fitSlides();
+      window.addEventListener('resize', fitSlides);
+    </script>
+  </body>
+</html>

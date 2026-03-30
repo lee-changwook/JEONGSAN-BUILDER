@@ -1,0 +1,257 @@
+'use client';
+
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { Spreadsheet } from '@/components/validator/Spreadsheet';
+import { useValidatorStore } from '@/store/validator-store';
+import { makeDates } from '@/mocks/shared-data';
+import type { FindingSeverity } from '@/features/validator/types';
+
+export function Step2Validation() {
+  const {
+    findings,
+    findingStatuses,
+    loadedData,
+    dataSource,
+    selectedMonth,
+    acaSpreadsheetData,
+    courseReports,
+    updateSpreadsheetCell,
+    updateAttendanceCell,
+  } = useValidatorStore();
+
+  const isTikita = dataSource === 'tikita';
+  const [selectedCourseIdx, setSelectedCourseIdx] = useState(0);
+
+  const activeReport = courseReports[selectedCourseIdx] ?? null;
+  const errorCount = activeReport?.summary.errorCount ?? 0;
+  const warningCount = activeReport?.summary.warningCount ?? 0;
+  const issueStudentNames = new Set(
+    activeReport?.findings
+      .filter((f) => f.severity === 'error' || f.severity === 'warning')
+      .map((f) => f.studentName) ?? [],
+  );
+  const normalCount = (activeReport?.summary.totalStudents ?? 0) - issueStudentNames.size;
+
+  const activeCourse = loadedData[selectedCourseIdx] ?? loadedData[0];
+  const courseId = activeCourse?.course.id ?? '';
+  const students = isTikita
+    ? activeCourse?.students ?? []
+    : acaSpreadsheetData[courseId] ?? activeCourse?.students ?? [];
+  const dates = activeCourse ? makeDates(activeCourse.course.dayOfWeek) : [];
+
+  const courseFindings = findings.filter((f) => f.gangjwaName === activeCourse?.course.name);
+
+  const rowFindingsMap: Record<number, Array<{ id: string; severity: FindingSeverity; message: string; suggestion: string }>> = {};
+  if (activeReport) {
+    const pendingFindings = courseFindings.filter(
+      (f) => (f.severity === 'error' || f.severity === 'warning') && (findingStatuses[f.id] ?? 'pending') === 'pending',
+    );
+    for (const f of pendingFindings) {
+      const rowIdx = activeReport.rows.findIndex((r) => r.studentName === f.studentName);
+      if (rowIdx >= 0) {
+        if (!rowFindingsMap[rowIdx]) rowFindingsMap[rowIdx] = [];
+        rowFindingsMap[rowIdx].push({ id: f.id, severity: f.severity, message: f.message, suggestion: f.suggestion });
+      }
+    }
+  }
+
+  const highlights: Array<{ row: number; col: string; severity: FindingSeverity }> = [];
+  if (activeReport) {
+    activeReport.rows.forEach((row, rowIdx) => {
+      if (row.chayiHighlight) {
+        highlights.push({ row: rowIdx, col: 'chayi', severity: row.chayiHighlight.severity });
+        highlights.push({ row: rowIdx, col: 'nabip', severity: row.chayiHighlight.severity });
+      }
+      if (row.statusHighlight && isTikita) {
+        highlights.push({ row: rowIdx, col: 'status', severity: row.statusHighlight.severity });
+      }
+      if (row.unpaidHighlight) {
+        highlights.push({ row: rowIdx, col: 'unpaid', severity: row.unpaidHighlight.severity });
+      }
+      for (const [date, cell] of Object.entries(row.attendanceCells)) {
+        if (cell.highlight) {
+          highlights.push({ row: rowIdx, col: date, severity: cell.highlight.severity });
+        }
+      }
+    });
+  }
+
+  return (
+    <>
+      <div className="mx-auto max-w-[1400px] min-h-[calc(100vh-130px)] px-10 py-8 pr-[390px] pb-[60px]">
+        <div className="pr-8">
+          {activeCourse && (
+            <div className="flex justify-between items-center gap-4 px-5 py-4 bg-gray-900 border border-gray-700 rounded-[10px] mb-4">
+              {isTikita && loadedData.length > 1 ? (
+                <select
+                  className="w-full p-0 text-base font-bold text-white bg-transparent border-none outline-none cursor-pointer appearance-auto [&_option]:bg-gray-900 [&_option]:text-white"
+                  value={selectedCourseIdx}
+                  onChange={(e) => setSelectedCourseIdx(Number(e.target.value))}
+                >
+                  {loadedData.map((cd, idx) => (
+                    <option key={cd.course.id} value={idx}>
+                      {cd.course.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-base font-bold text-white">{activeCourse.course.name}</span>
+                </div>
+              )}
+              <span className="shrink-0 px-3 py-1 bg-white/10 border border-white/20 rounded-md text-xs font-semibold text-white/80">{isTikita ? '티키타' : 'ACA2000'}</span>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <Spreadsheet
+              students={students}
+              dates={dates}
+              highlights={highlights}
+              rowFindings={rowFindingsMap}
+              showSummaryColumns
+              showStatusColumn={isTikita}
+              showDiscountColumn={isTikita}
+              courseRule={activeCourse?.rule}
+              readOnly={!isTikita}
+              onChange={(studentIdx, field, value) => updateSpreadsheetCell(courseId, studentIdx, field, value)}
+              onAttendanceChange={(studentIdx, date, value) => updateAttendanceCell(courseId, studentIdx, date, value)}
+            />
+          </div>
+          {isTikita && (
+            <div className="mt-3 px-4 py-2.5 bg-blue-50 border border-blue-300 rounded-lg text-[13px] text-blue-800">
+              출결 상태, 할인, 재원 컬럼을 클릭하여 직접 수정할 수 있습니다. 수정 시 자동으로 재검증됩니다.
+            </div>
+          )}
+          {!isTikita && (
+            <div className="mt-3 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[13px] text-amber-800">
+              ACA2000(중심업무 프로그램)에서 데이터를 수정하시기 바랍니다.
+            </div>
+          )}
+        </div>
+
+        <div className="fixed top-[156px] right-[max(40px,calc((100vw-1400px)/2+40px))] w-[310px] border-l border-gray-200 pl-7 pr-4 max-h-[calc(100vh-180px)] overflow-y-auto pb-6">
+          <div className="py-5">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center px-2 py-3 rounded-[10px] border bg-red-50 border-red-200">
+                <div className="text-2xl font-bold text-red-600">{errorCount}</div>
+                <div className="text-xs text-gray-500 mt-0.5">에러</div>
+              </div>
+              <div className="text-center px-2 py-3 rounded-[10px] border bg-amber-50 border-amber-200">
+                <div className="text-2xl font-bold text-amber-600">{warningCount}</div>
+                <div className="text-xs text-gray-500 mt-0.5">경고</div>
+              </div>
+              <div className="text-center px-2 py-3 rounded-[10px] border bg-emerald-50 border-emerald-300">
+                <div className="text-2xl font-bold text-emerald-600">{normalCount}</div>
+                <div className="text-xs text-gray-500 mt-0.5">정상</div>
+              </div>
+            </div>
+            <div className="text-xs text-gray-400 mt-2.5 text-center">이름 옆 아이콘을 클릭하면 상세 정보 확인</div>
+          </div>
+
+          <div className="h-px bg-gray-200" />
+
+          <div className="py-5">
+            <div className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide mb-3.5">대조 요약</div>
+            {activeReport && (
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">총 계산 금액</span>
+                  <span className="font-semibold text-gray-900">{activeReport.summary.totalGyesan.toLocaleString()}원</span>
+                </div>
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">총 납입 금액</span>
+                  <span className="font-semibold text-gray-900">{activeReport.summary.totalNabip.toLocaleString()}원</span>
+                </div>
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">총 차이</span>
+                  <span className={activeReport.summary.totalChayi !== 0 ? 'font-semibold text-red-600' : 'font-medium text-emerald-500'}>
+                    {activeReport.summary.totalChayi === 0 ? '일치' : `${activeReport.summary.totalChayi.toLocaleString()}원`}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="h-px bg-gray-200" />
+
+          {activeCourse && (
+            <div className="py-5">
+              <div className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide mb-3.5">대조 기준</div>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">실제 납입액 vs 총 수강료</span>
+                  <span className="font-semibold text-gray-900">{(activeCourse.rule.totalHoesu * activeCourse.rule.unitPrice + activeCourse.rule.gyojaeBi).toLocaleString()}원</span>
+                </div>
+                {isTikita && (
+                  <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                    <span className="text-gray-700">할인율</span>
+                    <span className="font-semibold text-gray-900">학생별 개별 적용</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">출결수</span>
+                  <span className="font-semibold text-gray-900">{activeCourse.rule.totalHoesu}회 기준</span>
+                </div>
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">교재비 포함 여부</span>
+                  <span className={activeCourse.rule.gyojaeBi > 0 ? 'font-semibold text-gray-900' : 'font-medium text-emerald-500'}>
+                    {activeCourse.rule.gyojaeBi > 0 ? `포함 (${activeCourse.rule.gyojaeBi.toLocaleString()}원)` : '미포함'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="h-px bg-gray-200" />
+
+          {activeCourse && (
+            <div className="py-5">
+              <div className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide mb-3.5">강좌 정보</div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>수업 기간</span>
+                <span className="font-semibold text-gray-900">{selectedMonth}</span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>대조 기간</span>
+                <span className="font-semibold text-gray-900">
+                  {activeCourse.rule.queryPeriodStart} ~ {activeCourse.rule.queryPeriodEnd.slice(5)}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>강사</span>
+                <span className="font-semibold text-gray-900">
+                  {activeCourse.course.isClinic
+                    ? `${activeCourse.course.teacher}의 조교`
+                    : activeCourse.course.teacher}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>일정</span>
+                <span className="font-semibold text-gray-900">{activeCourse.rule.schedule}</span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>총 회차</span>
+                <span className="font-semibold text-gray-900">{activeCourse.rule.totalHoesu}회</span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>1회당 수강료</span>
+                <span className="font-semibold text-gray-900">{activeCourse.rule.unitPrice.toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>총 수강료</span>
+                <span className="font-semibold text-gray-900">{(activeCourse.rule.totalHoesu * activeCourse.rule.unitPrice).toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-between py-1.5 text-sm text-gray-700">
+                <span>교재비</span>
+                <span className="font-semibold text-gray-900">{activeCourse.rule.gyojaeBi.toLocaleString()}원</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+    </>
+  );
+}
