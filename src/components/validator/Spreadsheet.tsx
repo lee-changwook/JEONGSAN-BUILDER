@@ -101,6 +101,7 @@ export function Spreadsheet({
   const [modifiedCells, setModifiedCells] = useState<Set<string>>(new Set());
   const [openTooltipRow, setOpenTooltipRow] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const [headerTip, setHeaderTip] = useState<{ top: number; left: number } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const initialStudentsRef = useRef(students);
 
@@ -172,7 +173,7 @@ export function Spreadsheet({
               </th>
             )}
             <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20">
-              미납액
+              미납금
             </th>
             {showStatusColumn && (
               <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-12 min-w-12 max-w-12">
@@ -185,12 +186,22 @@ export function Spreadsheet({
                   출결수
                 </th>
                 <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20">
-                  총 수강료
+                  기대 납입금
                 </th>
                 <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20">
-                  실제 납입액
+                  미납금
                 </th>
                 <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20">
+                  실제 납입금
+                </th>
+                <th
+                  className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20 cursor-help"
+                  onMouseEnter={(e) => {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setHeaderTip({ top: rect.top - 4, left: rect.left + rect.width / 2 });
+                  }}
+                  onMouseLeave={() => setHeaderTip(null)}
+                >
                   차이
                 </th>
               </>
@@ -203,7 +214,7 @@ export function Spreadsheet({
             const totalFee = courseRule
               ? Math.round((courseRule.unitPrice * courseRule.totalHoesu + courseRule.gyojaeBi) * (1 - student.discount))
               : student.computedAmount;
-            const diff = student.nabipAmount - totalFee;
+            const diff = (student.unpaidAmount + student.nabipAmount) - totalFee;
 
             return (
               <tr key={student.name}>
@@ -258,15 +269,15 @@ export function Spreadsheet({
                             {courseRule && (
                               <div className="flex flex-col gap-1 px-2.5 py-2 bg-gray-50 rounded-md border border-gray-100">
                                 <div className="flex justify-between items-center text-xs">
-                                  <span className="text-gray-500">총 수강료</span>
+                                  <span className="text-gray-500">기대 납입금</span>
                                   <span className="font-semibold text-gray-900">
-                                    {formatNumber(courseRule.unitPrice * courseRule.totalHoesu + courseRule.gyojaeBi)}원
+                                    {formatNumber(totalFee)}원
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center text-xs">
-                                  <span className="text-gray-500">학생 계산액</span>
+                                  <span className="text-gray-500">실제 납입금</span>
                                   <span className={diff !== 0 ? 'font-bold text-red-600' : 'font-semibold text-gray-900'}>
-                                    {formatNumber(totalFee)}원
+                                    {formatNumber(student.nabipAmount)}원
                                   </span>
                                 </div>
                                 {diff !== 0 && (
@@ -388,6 +399,11 @@ export function Spreadsheet({
                     <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
                       {formatNumber(totalFee)}
                     </td>
+                    <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
+                      <span className={student.unpaidAmount > 0 ? 'font-bold text-red-600' : undefined}>
+                        {student.unpaidAmount > 0 ? formatNumber(student.unpaidAmount) : '0'}
+                      </span>
+                    </td>
                     <td className={cn(
                       'px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap',
                       getHighlight(rowIdx, 'nabip'),
@@ -399,7 +415,7 @@ export function Spreadsheet({
                     <td
                       className={cn(
                         'px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap',
-                        getHighlight(rowIdx, 'chayi'),
+                        diff !== 0 && getHighlight(rowIdx, 'chayi'),
                         diff !== 0 && onRowClick && 'cursor-pointer',
                       )}
                       onClick={diff !== 0 ? () => onRowClick?.(student.name) : undefined}
@@ -415,6 +431,14 @@ export function Spreadsheet({
           })}
         </tbody>
       </table>
+      {headerTip && (
+        <div
+          className="fixed z-[1000] whitespace-nowrap rounded bg-gray-800 px-2.5 py-1.5 text-[11px] text-gray-200 shadow-lg"
+          style={{ top: headerTip.top, left: headerTip.left, transform: 'translate(-50%, -100%)' }}
+        >
+          (미납금 + 실제 납입금) − 기대 납입금. 0이면 정상
+        </div>
+      )}
     </div>
   );
 }

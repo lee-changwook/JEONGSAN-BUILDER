@@ -275,11 +275,13 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
 
   let courseData: CourseData | null = null;
   if (studentRows.length > 0) {
-    const courseName = cellString(ws.getCell('A1').value).trim().replace(/\*.*$/, '').trim() || 'ACA2000 수업';
+    const rawA1 = cellString(ws.getCell('A1').value).trim();
+    const courseName = rawA1.replace(/\*.*$/, '').trim() || 'ACA2000 수업';
+    const teacherMatch = rawA1.match(/\(([^)]+)\)\s*$/) ?? rawA1.match(/-([^-\s]+)T(?:반)?/);
     const course: CourseInfo = {
       id: 'aca-upload',
       name: courseName,
-      teacher: '',
+      teacher: teacherMatch?.[1]?.trim() ?? '',
       studentCount: studentRows.length,
       dayOfWeek: '',
       time: '',

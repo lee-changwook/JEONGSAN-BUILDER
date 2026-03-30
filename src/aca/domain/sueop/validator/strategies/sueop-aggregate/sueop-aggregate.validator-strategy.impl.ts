@@ -126,7 +126,7 @@ function generateFindings(
         addFinding(
           'error',
           'chulseok-sueomnyo',
-          `${row.sugangsaengName}: 청구 금액과 계산 금액 불일치`,
+          `청구 금액과 계산 금액 불일치`,
           `계산: ${row.gyesanAmount.toLocaleString()}원 / 납입: ${row.nabipAmount.toLocaleString()}원 (차이: ${row.chayi.toLocaleString()}원)`,
           { gyesanAmount: row.gyesanAmount, nabipAmount: row.nabipAmount, chayi: row.chayi },
           '회차별 일정, 회차별 수업료, 할인 여부를 재확인하세요',
@@ -142,10 +142,10 @@ function generateFindings(
         addFinding(
           'error',
           'chulseok-sueomnyo',
-          `${row.sugangsaengName}: 할인 적용이 납입액에 반영되지 않은 것으로 보입니��`,
+          `할인 적용이 납입액에 반영되지 않은 것으로 보입니다`,
           `할인액: ${row.harinAmount.toLocaleString()}원 / 차이: ${row.chayi.toLocaleString()}원`,
           { harinAmount: row.harinAmount, chayi: row.chayi },
-          '할인율 적용 여부를 재확인���세요',
+          '할인율 적용 여부를 재확인하세요',
           sgScope,
         );
       }
@@ -156,7 +156,7 @@ function generateFindings(
       addFinding(
         'warning',
         'attendance',
-        `${row.sugangsaengName}: 출석률 저조 (${(attendanceRate * 100).toFixed(0)}%)`,
+        `출석률 저조 (${(attendanceRate * 100).toFixed(0)}%)`,
         `총 ${totalBoons}회 중 ${row.chulseokCount}회 출석`,
         { totalBoons, chulseokCount: row.chulseokCount, attendanceRate: Math.round(attendanceRate * 100) },
         '학생 상담 및 환불 검토가 필요합니다',
@@ -168,10 +168,10 @@ function generateFindings(
       addFinding(
         'warning',
         'sueomnyo-existence',
-        `${row.sugangsaengName}: 미납액 ${row.minapAmount.toLocaleString()}원이 존재합니다`,
+        `미납액 ${row.minapAmount.toLocaleString()}원이 존재합니다`,
         `납입: ${row.nabipAmount.toLocaleString()}원 / 미납: ${row.minapAmount.toLocaleString()}원`,
         { nabipAmount: row.nabipAmount, minapAmount: row.minapAmount },
-        '미납 사유를 확인하고 수납 처리하세���',
+        '미납 사유를 확인하고 수납 처리하세요',
         sgScope,
       );
     }
@@ -181,7 +181,7 @@ function generateFindings(
         addFinding(
           'warning',
           'attendance',
-          `${row.sugangsaengName}: ${cell.date} 출결 미확인 상태`,
+          `${cell.date} 출결 미확인 상태`,
           `해당 일자의 출결이 확인되지 않았습니다`,
           { date: cell.date },
           '출결 상태를 확인하여 입력하세요',
@@ -206,7 +206,7 @@ function generateFindings(
           addFinding(
             'warning',
             'anomaly',
-            `${row.sugangsaengName}: 납입액이 다른 학생 대비 이상치입니다`,
+            `납입액이 다른 학생 대비 이상치입니다`,
             `납입: ${row.nabipAmount.toLocaleString()}원 / 평균: ${Math.round(mean).toLocaleString()}원 (z=${zScore.toFixed(1)})`,
             { nabipAmount: row.nabipAmount, mean: Math.round(mean), zScore: parseFloat(zScore.toFixed(1)) },
             '납입 금액을 재확인하세요',
