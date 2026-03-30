@@ -113,6 +113,9 @@ function generateFindings(
 
     if (row.chayi !== 0) {
       const isGyojaebiIncluded = gyojaeBi > 0 && Math.abs(row.chayi) === gyojaeBi;
+      const missedSessions = sessionAmount > 0 ? Math.abs(row.chayi) / sessionAmount : 0;
+      const isMissedMultiple = sessionAmount > 0 && missedSessions >= 1 && Math.abs(row.chayi) % sessionAmount === 0;
+
       if (isGyojaebiIncluded) {
         addFinding(
           'warning',
@@ -123,6 +126,19 @@ function generateFindings(
           '교재비 별도 청구 여부를 확인하세요',
           sgScope,
         );
+      } else if (isMissedMultiple) {
+        const n = Math.round(missedSessions);
+        addFinding(
+          'error',
+          'chulseok-sueomnyo',
+          `수강료 ${n}회분이 ${row.chayi < 0 ? '누락' : '초과'}된 것으로 보입니다`,
+          `1회 수강료: ${sessionAmount.toLocaleString()}원 × ${n}회 = ${Math.abs(row.chayi).toLocaleString()}원`,
+          { sessionAmount, missedCount: n, chayi: row.chayi },
+          row.chayi < 0
+            ? '해당 회차의 출결 기록 또는 청구 내역을 확인하세요'
+            : '중복 청구 또는 잘못된 회차 설정을 확인하세요',
+          sgScope,
+        );
       } else {
         addFinding(
           'error',
@@ -130,7 +146,7 @@ function generateFindings(
           `청구 금액과 계산 금액 불일치`,
           `계산: ${row.gyesanAmount.toLocaleString()}원 / 납입: ${row.nabipAmount.toLocaleString()}원 (차이: ${row.chayi.toLocaleString()}원)`,
           { gyesanAmount: row.gyesanAmount, nabipAmount: row.nabipAmount, chayi: row.chayi },
-          '회차별 일정, 회차별 수업료, 할인 여부를 재확인하세요',
+          '실강횟수, 회차별 수업료, 할인 여부를 재확인하세요',
           sgScope,
         );
       }
@@ -172,7 +188,7 @@ function generateFindings(
         `미납액 ${row.minapAmount.toLocaleString()}원이 존재합니다`,
         `납입: ${row.nabipAmount.toLocaleString()}원 / 미납: ${row.minapAmount.toLocaleString()}원`,
         { nabipAmount: row.nabipAmount, minapAmount: row.minapAmount },
-        '미납 사유를 확인하고 수납 처리하세요',
+        '미납 사유를 확인하고 수납을 요청하세요',
         sgScope,
       );
     }
@@ -191,6 +207,76 @@ function generateFindings(
         cell.highlight = { severity: 'warning', message: '출결 미확인' };
       }
     }
+
+    const absentCount = row.attendanceCells.filter((c) => c.hVectorCategory === 'absent').length;
+    if (absentCount > 0 && row.minapAmount === 0 && row.chayi === 0) {
+      addFinding(
+        'warning',
+        'amount-guess',
+        `결석 ${absentCount}회인데 수강료가 전액 납입되었습니다`,
+        `결석: ${absentCount}회 / 납입: ${row.nabipAmount.toLocaleString()}원 (기대: ${row.gyesanAmount.toLocaleString()}원)`,
+        { absentCount, nabipAmount: row.nabipAmount, gyesanAmount: row.gyesanAmount },
+        '환불 또는 보강 처리 여부를 확인하세요',
+        sgScope,
+      );
+    }
+
+    const jigakCount = row.attendanceCells.filter((c) => c.hVectorCategory === 'jigak').length;
+    const recordedCount = row.attendanceCells.filter((c) => c.hVectorCategory !== null).length;
+    if (jigakCount > 0 && recordedCount > 0 && jigakCount / recordedCount >= 0.5) {
+      addFinding(
+        'warning',
+        'attendance',
+        `지각(영상대체) 비율이 높습니다 (${jigakCount}/${recordedCount}회)`,
+        `전체 ${recordedCount}회 중 ${jigakCount}회 지각 처리`,
+        { jigakCount, recordedCount },
+        '실제 영상 발송 여부를 확인하세요',
+        sgScope,
+      );
+    }
+
+    if (row.chulseokCount === 0 && row.nabipAmount > 0) {
+      addFinding(
+        'error',
+        'chulseok-sueomnyo',
+        `출석 0회인데 납입액이 있습니다`,
+        `납입: ${row.nabipAmount.toLocaleString()}원 / 출석: 0회`,
+        { nabipAmount: row.nabipAmount, chulseokCount: 0 },
+        '수강료 청구 누락 또는 퇴원 처리 여부를 확인하세요',
+        sgScope,
+      );
+    }
+
+    if (row.nabipAmount === 0 && row.minapAmount === 0 && row.chulseokCount > 0) {
+      addFinding(
+        'error',
+        'chulseok-sueomnyo',
+        `출석 ${row.chulseokCount}회인데 납입액이 없습니다`,
+        `출석: ${row.chulseokCount}회 / 납입: 0원 / 미납: 0원`,
+        { chulseokCount: row.chulseokCount },
+        '수강료가 청구되지 않았을 수 있습니다. 확인하세요',
+        sgScope,
+      );
+    }
+
+    const filledCells = row.attendanceCells.filter((c) => c.hVectorCategory !== null);
+    const emptyCells = row.attendanceCells.filter((c) => c.hVectorCategory === null);
+    if (filledCells.length > 0 && emptyCells.length > 0) {
+      const firstFilledIdx = row.attendanceCells.findIndex((c) => c.hVectorCategory !== null);
+      const allLeadingEmpty = row.attendanceCells.slice(0, firstFilledIdx).every((c) => c.hVectorCategory === null);
+      const allTrailingFilled = row.attendanceCells.slice(firstFilledIdx).filter((c) => c.hVectorCategory === null).length === 0;
+      if (firstFilledIdx > 0 && allLeadingEmpty && allTrailingFilled) {
+        addFinding(
+          'info',
+          'enrollment',
+          `${firstFilledIdx + 1}회차부터 출석 — 중간 입반 추정`,
+          `${firstFilledIdx}회차까지 출결 기록 없음, ${firstFilledIdx + 1}회차부터 출석 시작`,
+          { firstAttendedSession: firstFilledIdx + 1, emptyBefore: firstFilledIdx },
+          '중간 입반 학생이면 정상입니다. 수강료 회차를 확인하세요',
+          sgScope,
+        );
+      }
+    }
   }
 
   const activeRows = rows.filter((r) => r.nabipAmount > 0);
@@ -204,14 +290,84 @@ function generateFindings(
       for (const row of activeRows) {
         const zScore = Math.abs(row.nabipAmount - mean) / stddev;
         if (zScore > 1.5) {
+          const isHighOutlier = row.nabipAmount > mean * 1.8;
+          const excessSessions = sessionAmount > 0 ? Math.round((row.nabipAmount - mean) / sessionAmount) : 0;
           addFinding(
             'warning',
             'anomaly',
-            `납입액이 다른 학생 대비 비정상적입니다`,
+            isHighOutlier
+              ? `납입액이 다른 학생보다 현저히 높습니다`
+              : `납입액이 다른 학생 대비 비정상적입니다`,
             `납입: ${row.nabipAmount.toLocaleString()}원 / 평균: ${Math.round(mean).toLocaleString()}원 (z=${zScore.toFixed(1)})`,
             { nabipAmount: row.nabipAmount, mean: Math.round(mean), zScore: parseFloat(zScore.toFixed(1)) },
-            '납입 금액을 재확인하세요',
+            isHighOutlier && excessSessions > 0
+              ? `이전 달 동영상 수강분(약 ${excessSessions}회분)이 합산된 것일 수 있습니다. 종이 출석부를 확인하세요`
+              : '납입 금액을 재확인하세요',
             { sugangsaengNanoId: row.sugangsaengNanoId, boonNanoId: null },
+          );
+        }
+      }
+    }
+  }
+
+  if (gyojaeBi > 0 && activeRows.length >= 2) {
+    const expectedWithGyojae = sessionAmount * totalBoons + gyojaeBi;
+    const expectedWithout = sessionAmount * totalBoons;
+    const withGyojae: string[] = [];
+    const withoutGyojae: string[] = [];
+    for (const row of activeRows) {
+      const total = row.nabipAmount + row.minapAmount;
+      if (Math.abs(total - expectedWithGyojae) <= 1) withGyojae.push(row.sugangsaengName);
+      else if (Math.abs(total - expectedWithout) <= 1) withoutGyojae.push(row.sugangsaengName);
+    }
+    if (withGyojae.length > 0 && withoutGyojae.length > 0) {
+      for (const row of activeRows) {
+        const total = row.nabipAmount + row.minapAmount;
+        if (Math.abs(total - expectedWithout) <= 1) {
+          addFinding(
+            'warning',
+            'amount-guess',
+            `교재비가 포함되지 않은 것으로 보입니다`,
+            `납입+미납: ${total.toLocaleString()}원 / 교재비 포함 시: ${expectedWithGyojae.toLocaleString()}원`,
+            { total, expectedWithGyojae, gyojaeBi },
+            `같은 반 ${withGyojae.length}명은 교재비 포함 금액입니다. 교재비 청구 여부를 확인하세요`,
+            { sugangsaengNanoId: row.sugangsaengNanoId, boonNanoId: null },
+          );
+        }
+      }
+    }
+  }
+
+  if (rows.length > 0) {
+    const boonCount = rows[0].attendanceCells.length;
+    for (let bi = 0; bi < boonCount; bi += 1) {
+      const date = rows[0].attendanceCells[bi]?.date;
+      if (!date) continue;
+      const allEmpty = rows.every((r) => r.attendanceCells[bi]?.hVectorCategory === null);
+      const allAbsent = rows.every((r) => {
+        const cat = r.attendanceCells[bi]?.hVectorCategory;
+        return cat === null || cat === 'absent';
+      });
+      if (allEmpty || allAbsent) {
+        const hasAnyRecord = rows.some((r) =>
+          r.attendanceCells.some((c, ci) => ci !== bi && c.hVectorCategory !== null),
+        );
+        if (hasAnyRecord) {
+          const isFirstSession = bi === 0;
+          addFinding(
+            'info',
+            'schedule',
+            isFirstSession
+              ? `${date} (1회차) — 전체 학생 출결 미입력`
+              : `${date} — 전체 학생 출결 기록 없음`,
+            isFirstSession
+              ? `첫 수업은 명단 미확정으로 종이 출석부만 기록된 경우가 많습니다`
+              : `해당 일자에 모든 학생의 출결이 비어있습니다`,
+            { date, sessionIndex: bi + 1 },
+            isFirstSession
+              ? '종이 출석부를 확인하여 아카에 입력하세요'
+              : '휴강이었다면 정상입니다. 출결 누락이 아닌지 확인하세요',
+            { sugangsaengNanoId: null, boonNanoId: null },
           );
         }
       }
@@ -220,7 +376,7 @@ function generateFindings(
 
   for (const row of rows) {
     row.findings = findings.filter(
-      (f) => f.scope?.sugangsaengNanoId === row.sugangsaengNanoId,
+      (f) => f.scope?.sugangsaengNanoId === row.sugangsaengNanoId || f.scope?.sugangsaengNanoId === null,
     );
   }
 

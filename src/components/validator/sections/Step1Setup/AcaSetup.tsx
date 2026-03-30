@@ -50,6 +50,7 @@ export function AcaSetup() {
   const [genStartDate, setGenStartDate] = useState(queryPeriodStart);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [parsedSessionCount, setParsedSessionCount] = useState<number | null>(null);
+  const [totalColumnCount, setTotalColumnCount] = useState<number | null>(null);
   const [parsedSessionFee, setParsedSessionFee] = useState<number | null>(null);
   const [parsedGyojaeBi, setParsedGyojaeBi] = useState<number | null>(null);
 
@@ -77,6 +78,7 @@ export function AcaSetup() {
 
     if (sessionDates.length > 0) {
       setAcaHoechaSchedule(sessionDates);
+      setTotalColumnCount(sessionDates.length);
     }
 
     if (courseMeta.sessionCount !== null) setParsedSessionCount(courseMeta.sessionCount);
@@ -182,14 +184,24 @@ export function AcaSetup() {
             <div className="bg-white border border-gray-200 rounded-[10px] p-5">
               <div className="flex gap-4 mb-3 last:mb-0">
                 <div className="flex-1 flex flex-col gap-1.5">
-                  <div className="text-[13px] text-gray-500">총 회차</div>
-                  <input
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white outline-none read-only:bg-gray-100 read-only:text-blue-600 read-only:font-semibold read-only:cursor-default"
-                    type="number"
-                    placeholder="예: 8"
-                    value={parsedSessionCount ?? ''}
-                    onChange={(e) => { const v = Number(e.target.value) || null; setParsedSessionCount(v); if (v !== null) updateCourseRule({ totalHoesu: v }); }}
-                  />
+                  <div className="text-[13px] text-gray-500">실강횟수 / 총 회차</div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white outline-none read-only:bg-gray-100 read-only:text-blue-600 read-only:font-semibold read-only:cursor-default"
+                      type="number"
+                      placeholder="실강"
+                      value={parsedSessionCount ?? ''}
+                      onChange={(e) => { const v = Number(e.target.value) || null; setParsedSessionCount(v); if (v !== null) updateCourseRule({ totalHoesu: v }); }}
+                    />
+                    <span className="text-gray-400 shrink-0">/</span>
+                    <input
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white outline-none read-only:bg-gray-100 read-only:text-blue-600 read-only:font-semibold read-only:cursor-default"
+                      type="number"
+                      value={totalColumnCount ?? ''}
+                      readOnly
+                      placeholder="총"
+                    />
+                  </div>
                 </div>
                 <div className="flex-1 flex flex-col gap-1.5">
                   <div className="text-[13px] text-gray-500">1회당 수강료</div>
@@ -204,7 +216,7 @@ export function AcaSetup() {
               </div>
               <div className="flex gap-4 mb-3 last:mb-0">
                 <div className="flex-1 flex flex-col gap-1.5">
-                  <div className="text-[13px] text-gray-500">총 수강료 (총 회차 × 1회당 수강료)</div>
+                  <div className="text-[13px] text-gray-500">기대 납입금 (실강횟수 × 1회당 수강료)</div>
                   <input
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white outline-none read-only:bg-gray-100 read-only:text-blue-600 read-only:font-semibold read-only:cursor-default"
                     type="text"
@@ -214,11 +226,11 @@ export function AcaSetup() {
                   />
                 </div>
                 <div className="flex-1 flex flex-col gap-1.5">
-                  <div className="text-[13px] text-gray-500">교재비</div>
+                  <div className="text-[13px] text-gray-500">교재비(선택)</div>
                   <input
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white outline-none read-only:bg-gray-100 read-only:text-blue-600 read-only:font-semibold read-only:cursor-default"
                     type="number"
-                    placeholder="예: 30000"
+                    placeholder="교재비 입력"
                     value={parsedGyojaeBi ?? ''}
                     onChange={(e) => { const v = Number(e.target.value) || null; setParsedGyojaeBi(v); if (v !== null) updateCourseRule({ gyojaeBi: v }); }}
                   />

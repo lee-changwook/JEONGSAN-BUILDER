@@ -232,7 +232,9 @@ export function Spreadsheet({
                             'w-[18px] h-[18px] rounded-full border-none text-[11px] font-bold leading-none cursor-pointer flex items-center justify-center shrink-0',
                             rowFindings[rowIdx].some((f) => f.severity === 'error')
                               ? 'bg-red-50 text-red-600 border-[1.5px] border-red-300'
-                              : 'bg-amber-50 text-amber-600 border-[1.5px] border-amber-200',
+                              : rowFindings[rowIdx].some((f) => f.severity === 'warning')
+                                ? 'bg-amber-50 text-amber-600 border-[1.5px] border-amber-200'
+                                : 'bg-blue-50 text-blue-600 border-[1.5px] border-blue-200',
                           )}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -272,14 +274,16 @@ export function Spreadsheet({
                                 <div className="flex items-center gap-1.5">
                                   <span className={cn(
                                     'text-[11px] font-semibold px-1.5 py-px rounded shrink-0',
-                                    f.severity === 'error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600',
+                                    f.severity === 'error' && 'bg-red-50 text-red-600',
+                                    f.severity === 'warning' && 'bg-amber-50 text-amber-600',
+                                    f.severity === 'info' && 'bg-blue-50 text-blue-600',
                                   )}>
-                                    {f.severity === 'error' ? '에러' : '경고'}
+                                    {f.severity === 'error' ? '에러' : f.severity === 'warning' ? '경고' : '정보'}
                                   </span>
                                   <span className="text-xs font-medium text-gray-800 leading-tight">{f.message}</span>
                                 </div>
                                 {f.reason && <div className="text-[11px] text-gray-500 leading-snug pl-0.5">{f.reason}</div>}
-                                <div className="text-[11px] text-gray-400 leading-snug pl-0.5">{f.suggestion}</div>
+                                <div className="text-[11px] text-blue-500 leading-snug pl-0.5">{f.suggestion}</div>
                               </div>
                             ))}
                           </div>

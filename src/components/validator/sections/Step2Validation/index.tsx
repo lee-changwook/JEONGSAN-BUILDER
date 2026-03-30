@@ -42,7 +42,7 @@ export function Step2Validation() {
   if (report) {
     report.analysisRows.forEach((row, rowIdx) => {
       const pending = row.findings.filter(
-        (f) => (f.severity === 'error' || f.severity === 'warning') && (findingStatuses[f.id] ?? 'pending') === 'pending',
+        (f) => (f.severity === 'error' || f.severity === 'warning' || f.severity === 'info') && (findingStatuses[f.id] ?? 'pending') === 'pending',
       );
       if (pending.length > 0) {
         rowFindingsMap[rowIdx] = pending.map((f) => ({
@@ -146,43 +146,19 @@ export function Step2Validation() {
                 </div>
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">총 미납금</span>
-                  <span className={report.sueopSummary.totalChayi !== 0 ? 'font-semibold text-red-600' : 'font-medium text-emerald-500'}>
-                    {report.sueopSummary.totalChayi === 0 ? '일치' : `${report.sueopSummary.totalChayi.toLocaleString()}원`}
+                  <span className={report.sueopSummary.inScope.minapTotal > 0 ? 'font-semibold text-red-600' : 'font-medium text-emerald-500'}>
+                    {report.sueopSummary.inScope.minapTotal > 0 ? `${report.sueopSummary.inScope.minapTotal.toLocaleString()}원` : '없음'}
                   </span>
                 </div>
+                {report.sueopSummary.inScope.harinTotal > 0 && (
+                  <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                    <span className="text-gray-700">총 할인금</span>
+                    <span className="font-semibold text-gray-900">{report.sueopSummary.inScope.harinTotal.toLocaleString()}원</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
-
-          <div className="h-px bg-gray-200" />
-
-          {activeCourse && (
-            <div className="py-5">
-              <div className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide mb-3.5">대조 기준</div>
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
-                  <span className="text-gray-700">기대 납입금</span>
-                  <span className="font-semibold text-gray-900">{(conductedCount * activeCourse.rule.unitPrice + activeCourse.rule.gyojaeBi).toLocaleString()}원</span>
-                </div>
-                {isTikita && (
-                  <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
-                    <span className="text-gray-700">할인율</span>
-                    <span className="font-semibold text-gray-900">학생별 개별 적용</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
-                  <span className="text-gray-700">출결수</span>
-                  <span className="font-semibold text-gray-900">{conductedCount}회 / {activeCourse.rule.totalHoesu}회</span>
-                </div>
-                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
-                  <span className="text-gray-700">교재비 포함 여부</span>
-                  <span className={activeCourse.rule.gyojaeBi > 0 ? 'font-semibold text-gray-900' : 'font-medium text-emerald-500'}>
-                    {activeCourse.rule.gyojaeBi > 0 ? `포함 (${activeCourse.rule.gyojaeBi.toLocaleString()}원)` : '미포함'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="h-px bg-gray-200" />
 
@@ -208,8 +184,8 @@ export function Step2Validation() {
                 </span>
               </div>
               <div className="flex justify-between py-1.5 text-sm text-gray-700">
-                <span>총 회차</span>
-                <span className="font-semibold text-gray-900">{activeCourse.rule.totalHoesu}회</span>
+                <span>실강횟수 / 총 회차</span>
+                <span className="font-semibold text-gray-900">{conductedCount}회 / {activeCourse.rule.totalHoesu}회</span>
               </div>
               <div className="flex justify-between py-1.5 text-sm text-gray-700">
                 <span>1회당 수강료</span>
@@ -217,7 +193,7 @@ export function Step2Validation() {
               </div>
               <div className="flex justify-between py-1.5 text-sm text-gray-700">
                 <span>기대 납입금</span>
-                <span className="font-semibold text-gray-900">{(activeCourse.rule.totalHoesu * activeCourse.rule.unitPrice).toLocaleString()}원</span>
+                <span className="font-semibold text-gray-900">{(conductedCount * activeCourse.rule.unitPrice).toLocaleString()}원</span>
               </div>
               <div className="flex justify-between py-1.5 text-sm text-gray-700">
                 <span>교재비</span>

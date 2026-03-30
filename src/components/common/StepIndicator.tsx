@@ -53,7 +53,7 @@ export function StepIndicator({ currentStep, completedSteps, onStepClick }: Step
                   <path d="M2.5 7.5a4.5 4.5 0 1 1 1.05 2.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                   <path d="M2.5 4.5v3h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                처음으로
+                다시하기
               </button>
             )}
           </div>
