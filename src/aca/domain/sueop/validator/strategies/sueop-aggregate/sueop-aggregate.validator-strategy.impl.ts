@@ -403,7 +403,7 @@ export class SueopAggregateValidatorStrategyImpl
       const zScore = Math.abs(total - mean) / stddev;
       if (zScore > 1.5) {
         this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.nabipAmount',
-          `${sg.name}의 납입액(${total.toLocaleString()})이 평균(${Math.round(mean).toLocaleString()})과 크게 다름`,
+          `납입액(${total.toLocaleString()})이 평균(${Math.round(mean).toLocaleString()})과 크게 다름`,
           '다른 수강생들과 납입액이 유의미하게 차이가 납니다. 할인, 추가청구, 또는 오입력 여부를 확인하세요.',
           {
             scope: { sugangsaengNanoId: sg.nanoId },
@@ -429,7 +429,7 @@ export class SueopAggregateValidatorStrategyImpl
         if (hwaginCategory === 'other-boonban') continue;
 
         this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.boonbanGroup',
-          `${sg.name}이(가) 다른 분반 그룹의 분 "${boon.boonName}"에 출석`,
+          `다른 분반 그룹의 분 "${boon.boonName}"에 출석`,
           `수강생은 "${sg.boonbanSugangsaengGroupName}" 소속이나 "${boon.boonbanSugangsaengGroupName}" 분반의 분에 출석 기록이 있습니다.`,
           {
             scope: { sugangsaengNanoId: sg.nanoId, boonNanoId: boon.boonNanoId },
@@ -460,7 +460,7 @@ export class SueopAggregateValidatorStrategyImpl
 
         if (mentionsHarin && totalHarin === 0) {
           this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.connectedSueomnyos.bigo',
-            `${sg.name}의 수업료 "${sm.cheongguName}" 비고에 할인 언급이 있으나 할인 금액이 0`,
+            `수업료 "${sm.cheongguName}" 비고에 할인 언급이 있으나 할인 금액이 0`,
             '비고에 할인 관련 내용이 작성되어 있으나 실제 할인 금액이 적용되지 않았습니다.',
             {
               scope: { sugangsaengNanoId: sg.nanoId, cheongguNanoId: sm.cheongguNanoId },
@@ -481,7 +481,7 @@ export class SueopAggregateValidatorStrategyImpl
         for (const bc of sm.bubunCheonggus) {
           if (bc.isChwiso && (bc.nabipAmount !== 0 || bc.minapAmount !== 0)) {
             this.addFinding(ctx, 'error', 'consistency', 'sugangsaeng.connectedSueomnyos.bubunCheonggus',
-              `${sg.name}의 취소된 부분청구 "${bc.name}"에 납입/미납 금액이 존재`,
+              `취소된 부분청구 "${bc.name}"에 납입/미납 금액이 존재`,
               '취소 상태의 부분청구에 금액이 남아 있습니다. 취소 처리가 올바르게 되지 않았을 수 있습니다.',
               {
                 scope: { sugangsaengNanoId: sg.nanoId, cheongguNanoId: sm.cheongguNanoId },
@@ -500,7 +500,7 @@ export class SueopAggregateValidatorStrategyImpl
 
         if (hasActiveConnections) {
           this.addFinding(ctx, 'warning', 'consistency', 'sugangsaeng.isHwalseong',
-            `비활성 수강생 ${sg.name}에 활성 상태의 분/콘 연결이 존재`,
+            `비활성 수강생에 활성 상태의 분/콘 연결이 존재`,
             '수강생이 비활성 상태이나 분 또는 콘에 활성 연결이 남아 있습니다. 연결 해제가 필요할 수 있습니다.',
             { scope: { sugangsaengNanoId: sg.nanoId } },
           );
@@ -512,7 +512,7 @@ export class SueopAggregateValidatorStrategyImpl
 
         if (hasNonZeroAmount) {
           this.addFinding(ctx, 'warning', 'consistency', 'sugangsaeng.isHwalseong',
-            `비활성 수강생 ${sg.name}에 납입/미납 금액이 존재`,
+            `비활성 수강생에 납입/미납 금액이 존재`,
             '수강생이 비활성 상태이나 납입 또는 미납 금액이 남아 있습니다.',
             { scope: { sugangsaengNanoId: sg.nanoId } },
           );
@@ -633,7 +633,11 @@ export class SueopAggregateValidatorStrategyImpl
     const hasRelatedAmounts = related.nabipAmount > 0 || related.minapAmount > 0;
 
     // --- Gyesan (expected) amount ---
-    const gyesanAmount = this.computeGyesanAmount(ctx, sg, billableAttendanceCount);
+    const rawGyesanAmount = this.computeGyesanAmount(ctx, sg, billableAttendanceCount);
+    // Apply discount rate to get the expected amount after discount
+    const gyesanAmount = harinRate > 0
+      ? Math.round(rawGyesanAmount * (1 - harinRate / 100))
+      : rawGyesanAmount;
     const chayi = nabipAmount - gyesanAmount;
 
     // --- Amount breakdown ---
