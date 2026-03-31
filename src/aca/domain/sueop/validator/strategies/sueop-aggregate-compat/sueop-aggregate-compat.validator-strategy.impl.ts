@@ -300,7 +300,7 @@ export class SueopAggregateCompatValidatorStrategyImpl
 
     if (hasAmount && !hasAnyAttendance) {
       this.addFinding(ctx, 'warning', 'attendance', 'sugangsaeng.attendance',
-        `${sg.name}: 납입/미납 금액이 있으나 출결 기록이 없음`,
+        `납입/미납 금액이 있으나 출결 기록이 없음`,
         '수강료는 발생했으나 출결 데이터가 전혀 없습니다. CSV에서 출결이 모두 비어있을 수 있습니다.',
         { scope: sgScope },
       );
@@ -312,7 +312,7 @@ export class SueopAggregateCompatValidatorStrategyImpl
     );
     if (hasAnyAttendance && onlyAbsent && hasAmount) {
       this.addFinding(ctx, 'warning', 'attendance', 'sugangsaeng.attendance',
-        `${sg.name}: 전체 결석인데 수강료가 존재`,
+        `전체 결석인데 수강료가 존재`,
         '모든 출결이 결석인데 납입/미납 금액이 있습니다. 확인이 필요합니다.',
         { scope: sgScope },
       );
@@ -323,7 +323,7 @@ export class SueopAggregateCompatValidatorStrategyImpl
     const attendedBoons = sg.connectedChulseokWorkBranches.length;
     if (attendedBoons > totalBoons) {
       this.addFinding(ctx, 'error', 'attendance', 'sugangsaeng.attendance',
-        `${sg.name}: 출결 수(${attendedBoons})가 회차 수(${totalBoons})보다 많음`,
+        `출결 수(${attendedBoons})가 회차 수(${totalBoons})보다 많음`,
         '출결 기록이 회차 수를 초과합니다. 데이터 파싱 오류일 수 있습니다.',
         { scope: sgScope },
       );
@@ -361,7 +361,7 @@ export class SueopAggregateCompatValidatorStrategyImpl
       const zScore = Math.abs(total - mean) / stddev;
       if (zScore > 1.5) {
         this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.amount',
-          `${sg.name}: 금액(${total.toLocaleString()})이 평균(${Math.round(mean).toLocaleString()})과 크게 다름`,
+          `금액(${total.toLocaleString()})이 평균(${Math.round(mean).toLocaleString()})과 크게 다름`,
           '다른 수강생들과 총 금액이 유의미하게 차이가 납니다.',
           {
             scope: { sugangsaengNanoId: sg.nanoId },
@@ -404,7 +404,7 @@ export class SueopAggregateCompatValidatorStrategyImpl
       const total = sgAmounts.get(sg.nanoId) ?? 0;
       if (total !== mostCommonAmount && total > 0) {
         this.addFinding(ctx, 'info', 'anomaly', 'sugangsaeng.amount',
-          `${sg.name}: 금액(${total.toLocaleString()}) ≠ 다수 금액(${mostCommonAmount.toLocaleString()})`,
+          `금액(${total.toLocaleString()}) ≠ 다수 금액(${mostCommonAmount.toLocaleString()})`,
           `대부분의 수강생(${mostCommonCount}명)은 ${mostCommonAmount.toLocaleString()}원인데 이 수강생은 ${total.toLocaleString()}원입니다. 할인, 추가청구, 또는 회차 차이일 수 있습니다.`,
           {
             scope: { sugangsaengNanoId: sg.nanoId },
@@ -518,8 +518,14 @@ export class SueopAggregateCompatValidatorStrategyImpl
     const chugaKon = ctx.input.sueop.kons.find((k) => k.konCategory === 'chuga-cheonggu');
     const textbookAmount = chugaKon?.gibonBoonAmount ?? 0;
     const sgHarinAmount = activeBubuns.reduce((s, b) => s + b.harinAmount, 0);
-    const gyesanAmount = billableAttendanceCount * sessionAmount + textbookAmount;
+    const rawGyesanAmount = billableAttendanceCount * sessionAmount + textbookAmount;
     const actualTotal = nabipAmount + minapAmount;
+    const sgHarinRate = sgHarinAmount > 0 && actualTotal > 0
+      ? Math.round((sgHarinAmount / (actualTotal + sgHarinAmount)) * 100)
+      : 0;
+    const gyesanAmount = sgHarinRate > 0
+      ? Math.round(rawGyesanAmount * (1 - sgHarinRate / 100))
+      : rawGyesanAmount;
     const chayi = actualTotal - gyesanAmount;
     const amountBreakdown = this.buildAmountBreakdown(sessionAmount, textbookAmount, billableAttendanceCount, actualTotal, sgHarinAmount);
     const enrollmentContext: EnrollmentContext = {
@@ -571,9 +577,7 @@ export class SueopAggregateCompatValidatorStrategyImpl
       isHwalseong: true,
       boonbanGroupName: null,
       attendanceCells,
-      harinRate: sgHarinAmount > 0 && actualTotal > 0
-        ? Math.round((sgHarinAmount / (actualTotal + sgHarinAmount)) * 100)
-        : 0,
+      harinRate: sgHarinRate,
       harinAmount: sgHarinAmount,
       harinHighlight: sgHarinAmount > 0
         ? { severity: 'info' as FindingSeverity, message: `할인 ${Math.round((sgHarinAmount / (actualTotal + sgHarinAmount)) * 100)}% 적용됨` }

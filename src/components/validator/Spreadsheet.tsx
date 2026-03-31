@@ -36,7 +36,7 @@ const statusLabels: Record<StudentRow['status'], string> = {
 };
 
 const highlightClassMap: Record<FindingSeverity, string> = {
-  error: 'bg-red-50 text-red-600 font-bold border-2 border-red-300 rounded px-2 py-1.5 animate-[pulseError_1s_ease-out]',
+  error: 'bg-red-50 text-red-600 font-bold outline outline-2 outline-red-300 -outline-offset-2 animate-[pulseError_1s_ease-out]',
   warning: 'bg-amber-50',
   info: 'bg-blue-50 text-blue-600 font-bold',
 };
@@ -181,6 +181,9 @@ export function Spreadsheet({
                 <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-12 min-w-12 max-w-12">
                   출결수
                 </th>
+                <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-12 min-w-12 max-w-12">
+                  할인율
+                </th>
                 <th className="bg-gray-900 px-2 py-2.5 text-center font-semibold text-white border-b border-gray-700 text-xs whitespace-nowrap w-20 min-w-20">
                   기대 납입금
                 </th>
@@ -219,9 +222,9 @@ export function Spreadsheet({
             const diff = aRow
               ? aRow.chayi
               : (() => {
-                  const rawDiff = (student.unpaidAmount + student.nabipAmount) - totalFee;
-                  return Math.abs(rawDiff) <= 1 ? 0 : rawDiff;
-                })();
+                const rawDiff = (student.unpaidAmount + student.nabipAmount) - totalFee;
+                return Math.abs(rawDiff) <= 1 ? 0 : rawDiff;
+              })();
 
             return (
               <tr key={student.name}>
@@ -277,28 +280,28 @@ export function Spreadsheet({
                               tooltipPos.above ? 'bottom-[-6px] rotate-[225deg]' : 'top-[-6px] rotate-45',
                             )} />
                             <div style={{ width: '100%', wordBreak: 'break-word', overflowWrap: 'break-word' }} className="flex flex-col gap-4">
-                            {aRow?.amountBreakdown && aRow.amountBreakdown.lines.length > 0 && (
-                              <div className="bg-gray-50 border border-gray-200 rounded-md px-2.5 py-2 text-[11px] text-gray-600 leading-snug whitespace-pre-line">
-                                {aRow.amountBreakdown.explanation}
-                              </div>
-                            )}
-                            {rowFindings[rowIdx].map((f) => (
-                              <div key={f.id} className="flex flex-col gap-1">
-                                <div className="flex items-start gap-1.5">
-                                  <span className={cn(
-                                    'text-[11px] font-semibold px-1.5 py-px rounded shrink-0 mt-px',
-                                    f.severity === 'error' && 'bg-red-50 text-red-600',
-                                    f.severity === 'warning' && 'bg-amber-50 text-amber-600',
-                                    f.severity === 'info' && 'bg-blue-50 text-blue-600',
-                                  )}>
-                                    {f.severity === 'error' ? '에러' : f.severity === 'warning' ? '경고' : '정보'}
-                                  </span>
-                                  <span className="text-xs font-medium text-gray-800 leading-snug">{f.message}</span>
+                              {aRow?.amountBreakdown && aRow.amountBreakdown.lines.length > 0 && (
+                                <div className="bg-gray-50 border border-gray-200 rounded-md px-2.5 py-2 text-[11px] text-gray-600 leading-snug whitespace-pre-line">
+                                  {aRow.amountBreakdown.explanation}
                                 </div>
-                                {f.reason && <div className="text-[11px] text-gray-500 leading-snug pl-0.5 whitespace-pre-line">{f.reason}</div>}
-                                {f.suggestion && <div className="text-[11px] text-blue-500 leading-snug pl-0.5 whitespace-pre-line">{f.suggestion}</div>}
-                              </div>
-                            ))}
+                              )}
+                              {rowFindings[rowIdx].map((f) => (
+                                <div key={f.id} className="flex flex-col gap-1">
+                                  <div className="flex items-start gap-1.5">
+                                    <span className={cn(
+                                      'text-[11px] font-semibold px-1.5 py-px rounded shrink-0 mt-px',
+                                      f.severity === 'error' && 'bg-red-50 text-red-600',
+                                      f.severity === 'warning' && 'bg-amber-50 text-amber-600',
+                                      f.severity === 'info' && 'bg-blue-50 text-blue-600',
+                                    )}>
+                                      {f.severity === 'error' ? '에러' : f.severity === 'warning' ? '경고' : '정보'}
+                                    </span>
+                                    <span className="text-xs font-medium text-gray-800 leading-snug">{f.message}</span>
+                                  </div>
+                                  {f.reason && <div className="text-[11px] text-gray-500 leading-snug pl-0.5 whitespace-pre-line">{f.reason}</div>}
+                                  {f.suggestion && <div className="text-[11px] text-blue-500 leading-snug pl-0.5 whitespace-pre-line">{f.suggestion}</div>}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         )}
@@ -377,6 +380,11 @@ export function Spreadsheet({
                       {presentCount}
                     </td>
                     <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
+                      <span className="text-[13px] text-gray-500">
+                        {aRow ? (aRow.harinRate > 0 ? `${aRow.harinRate}%` : '0%') : (student.discount > 0 ? `${(student.discount * 100).toFixed(0)}%` : '0%')}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
                       {formatNumber(totalFee)}
                     </td>
                     <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
@@ -416,7 +424,7 @@ export function Spreadsheet({
           className="fixed z-[1000] whitespace-nowrap rounded bg-gray-800 px-2.5 py-1.5 text-[11px] text-gray-200 shadow-lg"
           style={{ top: headerTip.top, left: headerTip.left, transform: 'translate(-50%, -100%)' }}
         >
-          실제 납입금 − 기대 납입금. 0이면 정상
+          (미납금 + 실제 납입금) − 기대 납입금. 0이면 정상
         </div>
       )}
     </div>

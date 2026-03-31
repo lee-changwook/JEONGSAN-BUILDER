@@ -122,7 +122,8 @@ export function Step2Validation() {
           </div>
         </div>
 
-        <div className="fixed top-[156px] right-[max(40px,calc((100vw-1400px)/2+40px))] w-[310px] border-l border-gray-200 pl-7 pr-4 max-h-[calc(100vh-180px)] overflow-y-auto pb-6">
+        <div className="fixed top-[156px] right-[max(40px,calc((100vw-1400px)/2+40px))] w-[310px] border-l border-gray-200 pl-7 pr-4 max-h-[calc(100vh-180px)] overflow-y-auto pb-6 pointer-events-none">
+          <div className="pointer-events-auto">
           <div className="py-5">
             <div className="grid grid-cols-3 gap-2">
               <div className="text-center px-2 py-3 rounded-[10px] border bg-red-50 border-red-200">
@@ -220,6 +221,7 @@ export function Step2Validation() {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 

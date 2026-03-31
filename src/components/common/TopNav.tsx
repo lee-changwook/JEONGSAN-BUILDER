@@ -37,7 +37,9 @@ export function TopNav() {
               ? 'text-[13px] font-semibold text-blue-600 cursor-default no-underline'
               : 'text-[13px] font-medium text-gray-500 cursor-pointer transition-colors duration-150 no-underline hover:text-gray-900'
           }
-          href="/settla/paybuilder"
+          href="https://pay-builder.netlify.app/"
+          target="_blank"
+          rel="noopener noreferrer"
         >
           페이빌더
         </a>
