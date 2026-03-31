@@ -85,12 +85,11 @@ export interface CourseReport {
   rows: AnalysisRow[];
   summary: CourseSummary;
   findings: Array<{
-    id: string;
     severity: FindingSeverity;
     category: string;
     message: string;
     reason: string;
-    evidence: Record<string, string | number>;
-    suggestion: string;
+    evidence?: Record<string, unknown>;
+    suggestion?: string;
   }>;
 }

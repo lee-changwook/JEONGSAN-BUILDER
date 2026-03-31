@@ -161,11 +161,6 @@ export class SueopAggregateCompatValidatorStrategyImpl
     const preDiscountAmount = totalAmount + harinAmount;
 
     if (totalAmount === 0) {
-      this.addFinding(ctx, 'info', 'amount-guess', 'sugangsaeng.amount',
-        `${sg.name}: 납입/미납 금액이 모두 0`,
-        '수강료가 발생하지 않았거나 데이터가 누락되었을 수 있습니다.',
-        { scope: sgScope },
-      );
       return;
     }
 
@@ -180,39 +175,47 @@ export class SueopAggregateCompatValidatorStrategyImpl
     const harinSuffix = harinAmount > 0 ? ` − 할인 ${harinAmount.toLocaleString()}` : '';
 
     if (guess === null) {
-      this.addFinding(ctx, 'error', 'amount-guess', 'sugangsaeng.amount',
-        `${sg.name}: 금액 ${totalAmount.toLocaleString()}원${harinSuffix} — 금액 구성을 추정할 수 없음`,
-        `회차당 ${sessionAmount.toLocaleString()}원${textbookAmount > 0 ? ` + 교재비 ${textbookAmount.toLocaleString()}원` : ''}${harinAmount > 0 ? ` (할인 전 ${preDiscountAmount.toLocaleString()}원)` : ''}으로는 금액을 설명할 수 없습니다.`,
-        {
-          scope: sgScope,
-          evidence: { totalAmount, preDiscountAmount, harinAmount, sessionAmount, textbookAmount, billableCount },
-        },
-      );
+      // Plain guess failed — try guessing with common discount rates (10%, 20%, 30%, ...)
+      const harinGuess = this.guessWithHarinRate(totalAmount, sessionAmount, textbookAmount);
+
+      if (harinGuess) {
+        this.addFinding(ctx, 'error', 'amount-guess', 'sugangsaeng.amount',
+          `금액 구성을 추정할 수 없음`,
+          `납입+미납 ${totalAmount.toLocaleString()}원을\n회차당 ${sessionAmount.toLocaleString()}원${textbookAmount > 0 ? ` + 교재비 ${textbookAmount.toLocaleString()}원` : ''}으로 설명할 수 없습니다.`,
+          {
+            scope: sgScope,
+            evidence: { totalAmount, sessionAmount, textbookAmount, billableCount, guessedHarinRate: harinGuess.rate },
+            suggestion: `할인율 ${harinGuess.rate}%가 적용된 것은 아닌지 확인하세요.\n할인 전 ${harinGuess.preDiscount.toLocaleString()}원 = ${sessionAmount.toLocaleString()} × ${harinGuess.guess.guessedHoechaCount}회${harinGuess.guess.hasTextbook ? ' + 교재비' : ''}`,
+          },
+        );
+      } else {
+        this.addFinding(ctx, 'error', 'amount-guess', 'sugangsaeng.amount',
+          `금액 구성을 추정할 수 없음`,
+          `납입+미납 ${totalAmount.toLocaleString()}원을\n회차당 ${sessionAmount.toLocaleString()}원${textbookAmount > 0 ? ` + 교재비 ${textbookAmount.toLocaleString()}원` : ''}${harinAmount > 0 ? `\n(할인 전 ${preDiscountAmount.toLocaleString()}원)` : ''}으로 설명할 수 없습니다.`,
+          {
+            scope: sgScope,
+            evidence: { totalAmount, preDiscountAmount, harinAmount, sessionAmount, textbookAmount, billableCount },
+          },
+        );
+      }
       return;
     }
 
     if (guess.isExactMatch && guess.guessedHoechaCount === billableCount) {
-      this.addFinding(ctx, 'info', 'amount-guess', 'sugangsaeng.amount',
-        `${sg.name}: ${totalAmount.toLocaleString()}원 = ${sessionAmount.toLocaleString()} × ${guess.guessedHoechaCount}회${guess.hasTextbook ? ` + 교재비 ${textbookAmount.toLocaleString()}` : ''}${harinSuffix} ✓`,
-        '금액이 출결 수와 정확히 일치합니다.',
-        {
-          scope: sgScope,
-          evidence: { ...guess, billableCount, harinAmount },
-        },
-      );
+      // Exact match — captured in amountBreakdown.explanation, not as a finding
       return;
     }
 
     if (guess.isExactMatch && guess.guessedHoechaCount !== billableCount) {
-      this.addFinding(ctx, 'warning', 'amount-guess', 'sugangsaeng.amount',
-        `${sg.name}: ${totalAmount.toLocaleString()}원 = ${sessionAmount.toLocaleString()} × ${guess.guessedHoechaCount}회${guess.hasTextbook ? ` + 교재비` : ''}${harinSuffix} — 출결 수(${billableCount})와 불일치`,
-        `금액에서 추정한 회차 수(${guess.guessedHoechaCount})가 실제 출결 수(${billableCount})와 다릅니다.`,
+      this.addFinding(ctx, 'error', 'amount-guess', 'sugangsaeng.amount',
+        `납입 회차(${guess.guessedHoechaCount})와 출결 수(${billableCount}) 불일치`,
+        `${totalAmount.toLocaleString()}원 = ${sessionAmount.toLocaleString()} × ${guess.guessedHoechaCount}회${guess.hasTextbook ? ' + 교재비' : ''}${harinSuffix}`,
         {
           scope: sgScope,
           evidence: { ...guess, billableCount, harinAmount },
           suggestion: guess.guessedHoechaCount > billableCount
-            ? `출결이 ${guess.guessedHoechaCount - billableCount}건 누락되었을 수 있습니다 (이전 달 동영상 포함 가능)`
-            : `출결이 ${billableCount - guess.guessedHoechaCount}건 초과 — 수강료가 부족할 수 있습니다`,
+            ? `출결이 ${guess.guessedHoechaCount - billableCount}건 누락되었을 수 있습니다.\n이전 달 동영상 수강분이 포함되었을 수 있습니다.`
+            : `출결이 ${billableCount - guess.guessedHoechaCount}건 초과입니다.\n수강료가 부족할 수 있습니다.`,
         },
       );
       return;
@@ -248,6 +251,33 @@ export class SueopAggregateCompatValidatorStrategyImpl
             guessedTotal: sessionAmount * count + (hasTextbook ? textbookAmount : 0),
             isExactMatch: true,
           };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ─── Harin Rate Guess ───────────────────────────────────────────────────
+
+  private guessWithHarinRate(
+    totalAmount: number,
+    sessionAmount: number,
+    textbookAmount: number,
+  ): { rate: number; preDiscount: number; guess: AmountGuess } | null {
+    // Try common discount rates: 10%, 20%, 30%, ...
+    const candidateRates = [10, 20, 30, 40, 50];
+
+    for (const rate of candidateRates) {
+      // totalAmount = preDiscount * (1 - rate/100)
+      // preDiscount = totalAmount / (1 - rate/100)
+      const preDiscount = Math.round(totalAmount / (1 - rate / 100));
+      const guess = this.guessAmountBreakdown(preDiscount, sessionAmount, textbookAmount);
+      if (guess !== null) {
+        // Verify the rounding is close (within 1% of the target rate)
+        const actualRate = ((preDiscount - totalAmount) / preDiscount) * 100;
+        if (Math.abs(actualRate - rate) < 1) {
+          return { rate, preDiscount, guess };
         }
       }
     }
@@ -483,14 +513,14 @@ export class SueopAggregateCompatValidatorStrategyImpl
       sueomnyoCount: 0,
     };
 
-    // Gyesan + Amount Breakdown
+    // Gyesan (expected) = session-only, no textbook
     const sessionAmount = ctx.input.sueop.amount ?? 0;
     const chugaKon = ctx.input.sueop.kons.find((k) => k.konCategory === 'chuga-cheonggu');
     const textbookAmount = chugaKon?.gibonBoonAmount ?? 0;
     const sgHarinAmount = activeBubuns.reduce((s, b) => s + b.harinAmount, 0);
     const gyesanAmount = billableAttendanceCount * sessionAmount + textbookAmount;
-    const chayi = nabipAmount - gyesanAmount;
     const actualTotal = nabipAmount + minapAmount;
+    const chayi = actualTotal - gyesanAmount;
     const amountBreakdown = this.buildAmountBreakdown(sessionAmount, textbookAmount, billableAttendanceCount, actualTotal, sgHarinAmount);
     const enrollmentContext: EnrollmentContext = {
       ipbanAt: null, toebanAt: null,
@@ -629,26 +659,9 @@ export class SueopAggregateCompatValidatorStrategyImpl
           isGuessed: false,
         });
       }
-    } else if (sessionAmount > 0 && billableCount > 0) {
-      lines.push({
-        label: '회차 수강료 (출결 기준)',
-        konCategory: 'hoecha',
-        unitAmount: sessionAmount,
-        count: billableCount,
-        subtotal: sessionAmount * billableCount,
-        isGuessed: false,
-      });
-      if (textbookAmount > 0) {
-        lines.push({
-          label: '교재비',
-          konCategory: 'chuga-cheonggu',
-          unitAmount: textbookAmount,
-          count: 1,
-          subtotal: textbookAmount,
-          isGuessed: false,
-        });
-      }
     }
+    // When guess fails, don't fall back to expected — leave lines empty.
+    // The explanation will show "구성 추정 불가" and Phase 2 already generates a finding.
 
     if (harinAmount > 0) {
       lines.push({

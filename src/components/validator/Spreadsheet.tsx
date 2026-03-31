@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { StudentRow, AttendanceStatus, FindingSeverity, CourseRule } from '@/features/validator/types';
+import type { SugangsaengAnalysisRow } from '@/aca/domain/sueop/validator';
 
 const attendanceLabels: Record<AttendanceStatus, string> = {
   present: '출',
@@ -14,16 +15,9 @@ const attendanceLabels: Record<AttendanceStatus, string> = {
 };
 
 const ATTENDANCE_ROTATE: AttendanceStatus[] = ['present', 'absent', 'late', 'dongYoung', 'bogang', 'hyuGang'];
-const STATUS_ROTATE: StudentRow['status'][] = ['active', 'jeonban', 'toewon'];
-
 function rotateAttendance(current: AttendanceStatus): AttendanceStatus {
   const idx = ATTENDANCE_ROTATE.indexOf(current);
   return ATTENDANCE_ROTATE[(idx + 1) % ATTENDANCE_ROTATE.length];
-}
-
-function rotateStudentStatus(current: StudentRow['status']): StudentRow['status'] {
-  const idx = STATUS_ROTATE.indexOf(current);
-  return STATUS_ROTATE[(idx + 1) % STATUS_ROTATE.length];
 }
 
 const attendanceCellClass: Record<AttendanceStatus, string> = {
@@ -58,7 +52,7 @@ export interface RowFinding {
   severity: FindingSeverity;
   message: string;
   reason: string;
-  suggestion: string;
+  suggestion?: string;
 }
 
 interface SpreadsheetProps {
@@ -69,6 +63,7 @@ interface SpreadsheetProps {
   onRowClick?: (studentName: string) => void;
   highlights?: CellHighlight[];
   rowFindings?: Record<number, RowFinding[]>;
+  analysisRows?: SugangsaengAnalysisRow[] | null;
   readOnly?: boolean;
   showSummaryColumns?: boolean;
   showStatusColumn?: boolean;
@@ -91,6 +86,7 @@ export function Spreadsheet({
   onAttendanceChange,
   highlights = [],
   rowFindings = {},
+  analysisRows,
   onRowClick,
   readOnly = false,
   showSummaryColumns = false,
@@ -210,12 +206,22 @@ export function Spreadsheet({
         </thead>
         <tbody>
           {students.map((student, rowIdx) => {
-            const presentCount = countPresent(student.attendance);
-            const totalFee = courseRule
-              ? Math.round((courseRule.unitPrice * conductedCount + courseRule.gyojaeBi) * (1 - student.discount))
-              : student.computedAmount;
-            const rawDiff = (student.unpaidAmount + student.nabipAmount) - totalFee;
-            const diff = Math.abs(rawDiff) <= 1 ? 0 : rawDiff;
+            // Use validator analysis rows when available; fall back to local computation
+            const aRow = analysisRows?.[rowIdx];
+            const presentCount = aRow ? aRow.billableAttendanceCount : countPresent(student.attendance);
+            const totalFee = aRow
+              ? aRow.gyesanAmount
+              : courseRule
+                ? Math.round((courseRule.unitPrice * conductedCount + courseRule.gyojaeBi) * (1 - student.discount))
+                : student.computedAmount;
+            const minapDisplay = aRow ? aRow.minapAmount : student.unpaidAmount;
+            const nabipDisplay = aRow ? aRow.nabipAmount : student.nabipAmount;
+            const diff = aRow
+              ? aRow.chayi
+              : (() => {
+                  const rawDiff = (student.unpaidAmount + student.nabipAmount) - totalFee;
+                  return Math.abs(rawDiff) <= 1 ? 0 : rawDiff;
+                })();
 
             return (
               <tr key={student.name}>
@@ -258,34 +264,42 @@ export function Spreadsheet({
                         </button>
                         {openTooltipRow === rowIdx && tooltipPos && (
                           <div
-                            className="fixed z-[1000] w-[280px] p-3.5 bg-white border border-gray-200 rounded-[10px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] flex flex-col gap-4"
-                            style={
-                              tooltipPos.above
+                            className="fixed z-[1000] p-3.5 bg-white border border-gray-200 rounded-[10px] shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                            style={{
+                              width: 360,
+                              ...(tooltipPos.above
                                 ? { bottom: window.innerHeight - tooltipPos.top + 8, left: tooltipPos.left, top: 'auto' }
-                                : { top: tooltipPos.top, left: tooltipPos.left }
-                            }
+                                : { top: tooltipPos.top, left: tooltipPos.left }),
+                            }}
                           >
                             <div className={cn(
                               'absolute left-3.5 w-2.5 h-2.5 bg-white border-l border-t border-gray-200',
                               tooltipPos.above ? 'bottom-[-6px] rotate-[225deg]' : 'top-[-6px] rotate-45',
                             )} />
+                            <div style={{ width: '100%', wordBreak: 'break-word', overflowWrap: 'break-word' }} className="flex flex-col gap-4">
+                            {aRow?.amountBreakdown && aRow.amountBreakdown.lines.length > 0 && (
+                              <div className="bg-gray-50 border border-gray-200 rounded-md px-2.5 py-2 text-[11px] text-gray-600 leading-snug whitespace-pre-line">
+                                {aRow.amountBreakdown.explanation}
+                              </div>
+                            )}
                             {rowFindings[rowIdx].map((f) => (
-                              <div key={f.id} className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1.5">
+                              <div key={f.id} className="flex flex-col gap-1">
+                                <div className="flex items-start gap-1.5">
                                   <span className={cn(
-                                    'text-[11px] font-semibold px-1.5 py-px rounded shrink-0',
+                                    'text-[11px] font-semibold px-1.5 py-px rounded shrink-0 mt-px',
                                     f.severity === 'error' && 'bg-red-50 text-red-600',
                                     f.severity === 'warning' && 'bg-amber-50 text-amber-600',
                                     f.severity === 'info' && 'bg-blue-50 text-blue-600',
                                   )}>
                                     {f.severity === 'error' ? '에러' : f.severity === 'warning' ? '경고' : '정보'}
                                   </span>
-                                  <span className="text-xs font-medium text-gray-800 leading-tight">{f.message}</span>
+                                  <span className="text-xs font-medium text-gray-800 leading-snug">{f.message}</span>
                                 </div>
-                                {f.reason && <div className="text-[11px] text-gray-500 leading-snug pl-0.5">{f.reason}</div>}
-                                <div className="text-[11px] text-blue-500 leading-snug pl-0.5">{f.suggestion}</div>
+                                {f.reason && <div className="text-[11px] text-gray-500 leading-snug pl-0.5 whitespace-pre-line">{f.reason}</div>}
+                                {f.suggestion && <div className="text-[11px] text-blue-500 leading-snug pl-0.5 whitespace-pre-line">{f.suggestion}</div>}
                               </div>
                             ))}
+                            </div>
                           </div>
                         )}
                       </span>
@@ -366,8 +380,8 @@ export function Spreadsheet({
                       {formatNumber(totalFee)}
                     </td>
                     <td className="px-2 py-2 text-center border-b border-gray-100 text-gray-700 text-[13px] whitespace-nowrap">
-                      <span className={student.unpaidAmount > 0 ? 'font-bold text-red-600' : undefined}>
-                        {student.unpaidAmount > 0 ? formatNumber(student.unpaidAmount) : '0'}
+                      <span className={minapDisplay > 0 ? 'font-bold text-red-600' : undefined}>
+                        {minapDisplay > 0 ? formatNumber(minapDisplay) : '0'}
                       </span>
                     </td>
                     <td className={cn(
@@ -375,7 +389,7 @@ export function Spreadsheet({
                       getHighlight(rowIdx, 'nabip'),
                     )}>
                       <span className={diff !== 0 ? 'font-bold' : undefined}>
-                        {formatNumber(student.nabipAmount)}
+                        {formatNumber(nabipDisplay)}
                       </span>
                     </td>
                     <td
@@ -402,7 +416,7 @@ export function Spreadsheet({
           className="fixed z-[1000] whitespace-nowrap rounded bg-gray-800 px-2.5 py-1.5 text-[11px] text-gray-200 shadow-lg"
           style={{ top: headerTip.top, left: headerTip.left, transform: 'translate(-50%, -100%)' }}
         >
-          (미납금 + 실제 납입금) − 기대 납입금. 0이면 정상
+          실제 납입금 − 기대 납입금. 0이면 정상
         </div>
       )}
     </div>

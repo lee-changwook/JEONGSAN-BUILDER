@@ -20,6 +20,39 @@ import {
   ValidatorIdEnum,
 } from '@/aca/domain/sueop/validator';
 
+// ─── Finding ID generation ──────────────────────────────────────────────────
+// The reference validator's ValidationFinding has no `id` field.
+// We generate stable IDs at the store layer for UI tracking (findingStatuses, React keys).
+
+export type FindingWithId = ValidationFinding & { id: string };
+
+function enrichFindingsWithIds(findings: ValidationFinding[]): FindingWithId[] {
+  return findings.map((f, i) => ({
+    ...f,
+    id: `f-${String(i + 1).padStart(3, '0')}`,
+  }));
+}
+
+function enrichReportWithIds(report: SueopAggregateReport): SueopAggregateReport & { findings: FindingWithId[] } {
+  const enrichedFindings = enrichFindingsWithIds(report.findings);
+
+  const enrichedRows = report.analysisRows.map((row) => ({
+    ...row,
+    findings: row.findings.map((rf) => {
+      const idx = report.findings.indexOf(rf);
+      return idx >= 0
+        ? enrichedFindings[idx]
+        : { ...rf, id: `f-row-${Math.random().toString(36).slice(2, 8)}` };
+    }),
+  }));
+
+  return {
+    ...report,
+    findings: enrichedFindings,
+    analysisRows: enrichedRows,
+  };
+}
+
 interface ValidatorState {
   currentStep: ValidatorStep;
   dataSource: DataSource;
@@ -125,7 +158,7 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
     const conductedDates = allDates.filter((d) => students.some((s) => s.attendance[d] != null));
     const dates = conductedDates.length > 0 ? conductedDates : allDates;
 
-    const input = buildSueopAggregateInput({
+    const rawInput = buildSueopAggregateInput({
       queryPeriodStart,
       queryPeriodEnd,
       courseName: firstCourse.course.name,
@@ -136,18 +169,18 @@ export const useValidatorStore = create<ValidatorState>()((set, get) => ({
     });
 
     const validator = ValidatorStrategyMap[validatorId];
-    const result = validator.run(input);
+    const result = validator.run(rawInput);
 
     if (!result.success) {
-      console.error('Validator input check failed:', result);
+      console.error('Validator input check failed:', result.message, result.errors);
       return;
     }
 
-    const report = result.payload;
+    const report = enrichReportWithIds(result.payload);
     const statuses: Record<string, FindingStatus> = {};
-    report.findings.forEach((f) => {
+    for (const f of report.findings) {
       statuses[f.id] = state.findingStatuses[f.id] ?? 'pending';
-    });
+    }
 
     set({ report, findingStatuses: statuses });
   },
