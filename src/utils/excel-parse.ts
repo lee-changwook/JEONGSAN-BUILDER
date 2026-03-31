@@ -216,7 +216,7 @@ export async function parseStudentsFromExcel(file: File): Promise<ExcelParseResu
     const attendance: Record<string, AttendanceStatus> = {};
     for (let di = 0; di < dateColIndices.length; di += 1) {
       const marker = cellString(row.getCell(dateColIndices[di]).value).trim();
-      if (marker) {
+      if (marker && marker !== '0') {
         attendance[sessionDates[di]] = mapExcelAttendance(marker);
       }
     }

@@ -16,6 +16,7 @@ const HVectorCategorySchema = z.enum([
   'chulseok-site',
   'chulseok-online',
   'jigak',
+  'bogang',
   'other-boonban',
   'absent',
   'mihwagin',
@@ -376,5 +377,6 @@ export const BILLABLE_CATEGORIES: HVectorCategory[] = [
   'chulseok-site',
   'chulseok-online',
   'jigak',
+  'bogang',
   'other-boonban',
 ];

@@ -42,10 +42,11 @@ type ParsedSheet = {
 // ─── ACA2000 Attendance Mapping ─────────────────────────────────────────────
 
 function mapAttendanceCode(code: string | null | undefined): HVectorCategory | null {
-  if (!code || code.trim() === '') return null;
+  if (!code || code.trim() === '' || code.trim() === '0') return null;
   const trimmed = code.trim();
   if (trimmed === '출') return 'chulseok-site';
   if (trimmed === '지') return 'jigak';
+  if (trimmed === '보') return 'bogang';
   if (trimmed === '결') return 'absent';
   if (trimmed === '동영') return 'chulseok-online';
   if (trimmed === '타') return 'other-boonban';

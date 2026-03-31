@@ -318,9 +318,9 @@ export class SueopAggregateValidatorStrategyImpl
       const category = cwb.hVector.hVectorHwaginCategory;
       const sueomnyo = sueomnyoByBoon.get(cwb.boonNanoId);
 
-      // TODO: chulseok-site, chulseok-online, jigak → sueomnyo must exist
+      // TODO: chulseok-site, chulseok-online, jigak, bogang → sueomnyo must exist
       if (
-        (category === 'chulseok-site' || category === 'chulseok-online' || category === 'jigak') &&
+        (category === 'chulseok-site' || category === 'chulseok-online' || category === 'jigak' || category === 'bogang') &&
         !sueomnyo
       ) {
         this.addFinding(ctx, 'error', 'chulseok-sueomnyo', `sugangsaeng.connectedChulseokWorkBranches`,
