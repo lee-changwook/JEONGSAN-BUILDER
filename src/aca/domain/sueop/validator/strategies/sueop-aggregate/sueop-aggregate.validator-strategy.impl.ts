@@ -1,462 +1,977 @@
-import type { ValidatorStrategy } from '../validator-strategy';
-import type { ValidatorResult, ValidationFinding, CellHighlight } from '../validator-strategy.type';
 import type {
-  SueopAggregateInput,
-  SueopAggregateReport,
-  SugangsaengAnalysisRow,
-  AttendanceCell,
-  HVectorCategory,
+  ValidatorStrategy,
+  ValidationResult,
+  ValidationContext,
+  ValidationFinding,
+  FindingSeverity,
+  FindingScope,
+  CellHighlight,
+} from '../validator-strategy.type';
+import {
+  SueopAggregateInputSchema,
+  BILLABLE_CATEGORIES,
+  type SueopAggregateInput,
+  type SueopAggregateDerived,
+  type SueopAggregateReport,
+  type Sugangsaeng,
+  type ConnectedSueomnyo,
+  type BubunCheonggu,
+  type QueryPeriod,
+  type SueomnyoScopeCategory,
+  type SugangsaengAnalysisRow,
+  type AttendanceCell,
+  type SueomnyoTimingDetail,
+  type SueopSummary,
+  type AmountBreakdown,
+  type AmountBreakdownLine,
+  type EnrollmentContext,
 } from './sueop-aggregate.validator-strategy.type';
 
-const BILLABLE_CATEGORIES: HVectorCategory[] = [
-  'chulseok-site',
-  'chulseok-online',
-  'jigak',
-  'other-boonban',
-];
+type Ctx = ValidationContext<SueopAggregateInput, SueopAggregateDerived>;
 
-function isBillable(cat: HVectorCategory): boolean {
-  return BILLABLE_CATEGORIES.includes(cat);
-}
+export class SueopAggregateValidatorStrategyImpl
+  implements ValidatorStrategy<SueopAggregateInput, SueopAggregateReport>
+{
+  // ─── Singleton ───────────────────────────────────────────────────────────
 
-function buildAnalysisRow(
-  sg: SueopAggregateInput['sugangsaengs'][number],
-  boonDates: Array<{ nanoId: string; date: string }>,
-  sessionAmount: number,
-  totalBoons: number,
-  gyojaeBi: number,
-): SugangsaengAnalysisRow {
-  const attendanceCells: AttendanceCell[] = boonDates.map((bd) => {
-    const wb = sg.connectedChulseokWorkBranches.find((w) => w.boonNanoId === bd.nanoId);
-    return {
-      date: bd.date,
-      hVectorCategory: wb?.hVector.hVectorHwaginCategory ?? null,
-      highlight: null,
-    };
-  });
+  private static instance: SueopAggregateValidatorStrategyImpl;
 
-  const chulseokCount = attendanceCells.filter(
-    (c) => c.hVectorCategory !== null && isBillable(c.hVectorCategory),
-  ).length;
+  private constructor() {}
 
-  const sueomnyos = sg.connectedSueomnyos;
-  const totalCheonggu = sueomnyos.reduce((acc, s) => acc + s.cheongguTotalAmount, 0);
-  const totalHarin = sueomnyos.reduce((acc, s) => acc + s.cheongguTotalHarinAmount, 0);
-  const totalActual = sueomnyos.reduce((acc, s) => acc + s.cheongguTotalActualAmount, 0);
-
-  const bubuns = sueomnyos.flatMap((s) => s.bubunCheonggus).filter((b) => !b.isChwiso);
-  const nabipAmount = bubuns.reduce((acc, b) => acc + b.nabipAmount, 0);
-  const minapAmount = bubuns.reduce((acc, b) => acc + b.minapAmount, 0);
-
-  const gyesanAmount = sessionAmount * totalBoons + gyojaeBi;
-  const discountedGyesan = totalHarin > 0 ? gyesanAmount - totalHarin : gyesanAmount;
-  const rawChayi = nabipAmount - discountedGyesan;
-  const chayi = Math.abs(rawChayi) <= 1 ? 0 : rawChayi;
-
-  let chayiHighlight: CellHighlight | null = null;
-  if (chayi !== 0) {
-    chayiHighlight = {
-      severity: 'error',
-      message: `납입액과 계산 금액 차이: ${chayi.toLocaleString()}원`,
-    };
+  public static getInstance(): SueopAggregateValidatorStrategyImpl {
+    if (!SueopAggregateValidatorStrategyImpl.instance) {
+      SueopAggregateValidatorStrategyImpl.instance = new SueopAggregateValidatorStrategyImpl();
+    }
+    return SueopAggregateValidatorStrategyImpl.instance;
   }
 
-  return {
-    sugangsaengNanoId: sg.nanoId,
-    sugangsaengName: sg.name,
-    attendanceCells,
-    chulseokCount,
-    gyesanAmount: discountedGyesan,
-    nabipAmount,
-    minapAmount,
-    harinAmount: totalHarin,
-    chayi,
-    chayiHighlight,
-    statusHighlight: null,
-    findings: [],
-  };
-}
+  // ─── Interface: checkInput ───────────────────────────────────────────────
 
-function generateFindings(
-  rows: SugangsaengAnalysisRow[],
-  input: SueopAggregateInput,
-  sessionAmount: number,
-  totalBoons: number,
-  gyojaeBi: number,
-): ValidationFinding[] {
-  const findings: ValidationFinding[] = [];
-  let seq = 1;
+  public checkInput(rawInput: unknown): ValidationResult<SueopAggregateInput> {
+    const parsed = SueopAggregateInputSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: 'Input schema validation failed',
+        errors: parsed.error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          rule: 'schema',
+          message: issue.message,
+        })),
+      };
+    }
+    return { success: true, payload: parsed.data };
+  }
 
-  function addFinding(
-    severity: ValidationFinding['severity'],
-    category: string,
-    message: string,
-    reason: string,
-    evidence: Record<string, string | number>,
-    suggestion: string,
-    scope: ValidationFinding['scope'],
-  ) {
-    findings.push({
-      id: `f-${String(seq++).padStart(3, '0')}`,
-      severity,
-      category,
-      message,
-      reason,
-      evidence,
-      suggestion,
-      scope,
+  // ─── Interface: process ──────────────────────────────────────────────────
+
+  public process(input: SueopAggregateInput): SueopAggregateReport {
+    const ctx: Ctx = {
+      input,
+      findings: [],
+      derived: {
+        sueopBoonMap: new Map(input.sueop.boons.map((b) => [b.nanoId, b])),
+        sueopKonMap: new Map(input.sueop.kons.map((k) => [k.nanoId, k])),
+      },
+    };
+
+    // Phase 1: Check the obvious — mapping validity (global scope)
+    this.phase1_checkMappingValidity(ctx);
+
+    // Per-sugangsaeng validation phases
+    for (const sg of input.sugangsaengs) {
+      // Phase 2: Connection state validity within sueop
+      this.phase2_checkConnectionStates(ctx, sg);
+      // Phase 3: Sueomnyo existence vs connections
+      this.phase3_checkSueomnyoExistence(ctx, sg);
+      // Phase 4: Chulseok × Sueomnyo cross-validation for hoecha boons
+      this.phase4_validateChulseokVsSueomnyo(ctx, sg);
+    }
+
+    // Phase 5: Cross-sugangsaeng checks & anomaly detection
+    this.phase5_crossSugangsaengChecks(ctx);
+
+    return this.buildReport(ctx);
+  }
+
+  // ─── Interface: run ──────────────────────────────────────────────────────
+
+  public run(rawInput: unknown): ValidationResult<SueopAggregateReport> {
+    const inputResult = this.checkInput(rawInput);
+    if (!inputResult.success) {
+      return inputResult;
+    }
+    return { success: true, payload: this.process(inputResult.payload) };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 1: Check the obvious — Mapping Validity
+  // README #3: All available kon and boon should exist in sueop.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private phase1_checkMappingValidity(ctx: Ctx): void {
+    const { sueopBoonMap, sueopKonMap } = ctx.derived;
+
+    for (const sg of ctx.input.sugangsaengs) {
+      const sgScope: FindingScope = { sugangsaengNanoId: sg.nanoId };
+
+      // Boon → Sueop.boons mapping
+      for (const boon of sg.connectedBoons) {
+        if (!sueopBoonMap.has(boon.boonNanoId)) {
+          this.addFinding(ctx, 'error', 'mapping', `sugangsaeng.connectedBoons`,
+            `분 "${boon.boonName}"이(가) 수업의 분 목록에 존재하지 않음`,
+            '수강생이 연결된 분이 수업에 포함되어 있지 않습니다. 데이터 정합성 오류입니다.',
+            { scope: sgScope, evidence: { boonNanoId: boon.boonNanoId, boonName: boon.boonName } },
+          );
+        }
+      }
+
+      // Kon → Sueop.kons mapping
+      for (const kon of sg.connectedKons) {
+        if (!sueopKonMap.has(kon.nanoId)) {
+          this.addFinding(ctx, 'error', 'mapping', `sugangsaeng.connectedKons`,
+            `콘 "${kon.konName}"이(가) 수업의 콘 목록에 존재하지 않음`,
+            '수강생이 연결된 콘이 수업에 포함되어 있지 않습니다. 데이터 정합성 오류입니다.',
+            { scope: sgScope, evidence: { konNanoId: kon.nanoId, konName: kon.konName } },
+          );
+        }
+      }
+
+      // ChulseokWorkBranch → Boon mapping
+      const sgBoonIds = new Set(sg.connectedBoons.map((b) => b.boonNanoId));
+      for (const cwb of sg.connectedChulseokWorkBranches) {
+        if (!sgBoonIds.has(cwb.boonNanoId)) {
+          this.addFinding(ctx, 'error', 'mapping', `sugangsaeng.connectedChulseokWorkBranches`,
+            `출결 워크 "${cwb.workBranchName}"이(가) 연결된 분을 찾을 수 없음`,
+            '출결 기록이 수강생의 분 연결 목록에 없는 분을 참조합니다.',
+            { scope: { ...sgScope, boonNanoId: cwb.boonNanoId }, evidence: { workBranchNanoId: cwb.workBranchNanoId } },
+          );
+        }
+      }
+
+      // Sueomnyo → Boon mapping (if boonNanoId is not null)
+      for (const sm of sg.connectedSueomnyos) {
+        if (sm.boonNanoId !== null && !sgBoonIds.has(sm.boonNanoId)) {
+          this.addFinding(ctx, 'error', 'mapping', `sugangsaeng.connectedSueomnyos`,
+            `수업료 "${sm.cheongguName}"이(가) 연결된 분을 찾을 수 없음`,
+            '수업료가 수강생의 분 연결 목록에 없는 분을 참조합니다.',
+            { scope: { ...sgScope, boonNanoId: sm.boonNanoId, cheongguNanoId: sm.cheongguNanoId } },
+          );
+        }
+      }
+
+      // Null iljeong / timestamp warnings
+      for (const boon of sg.connectedBoons) {
+        const konCategory = this.getKonCategoryForBoon(ctx, boon.konNanoId);
+        if (konCategory === 'hoecha' && boon.boonIljeong === null) {
+          this.addFinding(ctx, 'warning', 'mapping', `sugangsaeng.connectedBoons.boonIljeong`,
+            `회차콘 분 "${boon.boonName}"에 일정이 없음`,
+            '회차콘과 연결된 분인데 일정이 없습니다. 출결/시간대 검증이 불가합니다.',
+            { scope: { ...sgScope, boonNanoId: boon.boonNanoId } },
+          );
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 2: Connection State Validity
+  // README #4: Check if sugangsaengs have valid connection states inside a sueop
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private phase2_checkConnectionStates(ctx: Ctx, sg: Sugangsaeng): void {
+    const sgScope: FindingScope = { sugangsaengNanoId: sg.nanoId };
+    const sgKonIds = new Set(sg.connectedKons.map((k) => k.nanoId));
+    const sgBoonIds = new Set(sg.connectedBoons.map((b) => b.boonNanoId));
+    const chulseokBoonIds = new Set(sg.connectedChulseokWorkBranches.map((c) => c.boonNanoId));
+
+    // TODO: Boon → Kon bidirectional check
+    //  - If connected to a boon, should also be connected to the kon that boon belongs to
+    for (const boon of sg.connectedBoons) {
+      if (!sgKonIds.has(boon.konNanoId)) {
+        this.addFinding(ctx, 'error', 'connection', `sugangsaeng.connectedBoons`,
+          `분 "${boon.boonName}"의 콘에 수강생이 연결되어 있지 않음`,
+          '분에 연결되어 있으나 해당 분의 콘에는 연결되어 있지 않습니다.',
+          { scope: { ...sgScope, boonNanoId: boon.boonNanoId } },
+        );
+      }
+    }
+
+    // TODO: Kon → Boon check (hoecha kons must have a boon connection)
+    for (const kon of sg.connectedKons) {
+      if (kon.category === 'hoecha') {
+        const hasBoonForKon = sg.connectedBoons.some((b) => b.konNanoId === kon.nanoId);
+        if (!hasBoonForKon) {
+          this.addFinding(ctx, 'warning', 'connection', `sugangsaeng.connectedKons`,
+            `회차콘 "${kon.konName}"에 연결된 분이 없음`,
+            '회차콘에 수강생이 연결되어 있으나 해당 콘의 분에는 연결되어 있지 않습니다.',
+            { scope: sgScope },
+          );
+        }
+      }
+    }
+
+    // TODO: Hoecha boon → ChulseokWork check
+    for (const boon of sg.connectedBoons) {
+      const konCategory = this.getKonCategoryForBoon(ctx, boon.konNanoId);
+      if (konCategory === 'hoecha' && !chulseokBoonIds.has(boon.boonNanoId)) {
+        this.addFinding(ctx, 'warning', 'connection', `sugangsaeng.connectedBoons`,
+          `회차콘 분 "${boon.boonName}"에 출결 워크가 연결되지 않음`,
+          '회차콘 분에 연결되어 있으나 해당 분의 출결 워크에는 연결되어 있지 않습니다.',
+          { scope: { ...sgScope, boonNanoId: boon.boonNanoId } },
+        );
+      }
+    }
+
+    // TODO: ChulseokWork → Boon reverse check
+    for (const cwb of sg.connectedChulseokWorkBranches) {
+      if (!sgBoonIds.has(cwb.boonNanoId)) {
+        this.addFinding(ctx, 'error', 'connection', `sugangsaeng.connectedChulseokWorkBranches`,
+          `출결 워크 "${cwb.workBranchName}"의 분에 수강생이 연결되어 있지 않음`,
+          '출결 워크에 연결되어 있으나 해당 워크의 분에는 연결되어 있지 않습니다.',
+          { scope: { ...sgScope, boonNanoId: cwb.boonNanoId } },
+        );
+      }
+    }
+
+    // TODO: Multiple boons of same kon warning
+    const boonsByKon = new Map<string, string[]>();
+    for (const boon of sg.connectedBoons) {
+      const existing = boonsByKon.get(boon.konNanoId) ?? [];
+      existing.push(boon.boonNanoId);
+      boonsByKon.set(boon.konNanoId, existing);
+    }
+    for (const [konNanoId, boonNanoIds] of boonsByKon) {
+      if (boonNanoIds.length > 1) {
+        const konName = sg.connectedKons.find((k) => k.nanoId === konNanoId)?.konName ?? konNanoId;
+        this.addFinding(ctx, 'warning', 'connection', `sugangsaeng.connectedBoons`,
+          `콘 "${konName}"에 ${boonNanoIds.length}개의 분이 연결됨`,
+          '같은 콘에 복수의 분이 연결되어 있습니다. 전반 또는 other-boonban 케이스인지 확인이 필요합니다.',
+          { scope: sgScope, evidence: { konNanoId, boonCount: boonNanoIds.length } },
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 3: Sueomnyo Existence vs Connections
+  // README #5: Compare sugangsaeng connection status and their sueomnyo
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private phase3_checkSueomnyoExistence(ctx: Ctx, sg: Sugangsaeng): void {
+    const sgScope: FindingScope = { sugangsaengNanoId: sg.nanoId };
+    const sueomnyoBoonIds = new Set(
+      sg.connectedSueomnyos.filter((s) => s.boonNanoId !== null).map((s) => s.boonNanoId),
+    );
+
+    // TODO: Hoecha boon → sueomnyo existence
+    for (const boon of sg.connectedBoons) {
+      const konCategory = this.getKonCategoryForBoon(ctx, boon.konNanoId);
+      if (konCategory !== 'hoecha') continue;
+      if (!boon.isHwalseongBoonSugangsaeng) continue;
+
+      if (!sueomnyoBoonIds.has(boon.boonNanoId)) {
+        const isPastBoon = boon.boonIljeong !== null && new Date(boon.boonIljeong.startAt) < new Date();
+        this.addFinding(ctx, isPastBoon ? 'error' : 'warning', 'sueomnyo-existence',
+          `sugangsaeng.connectedSueomnyos`,
+          `분 "${boon.boonName}"에 대한 수업료가 없음`,
+          isPastBoon
+            ? '일정이 이미 지난 분인데 수업료가 생성되지 않았습니다.'
+            : '분에 연결되어 있으나 수업료가 아직 생성되지 않았습니다.',
+          { scope: { ...sgScope, boonNanoId: boon.boonNanoId }, evidence: { isPastBoon } },
+        );
+      }
+    }
+
+    // TODO: Chuga-cheonggu kon → sueomnyo for gibon boon
+    for (const kon of sg.connectedKons) {
+      if (kon.category !== 'chuga-cheonggu') continue;
+      if (!kon.isHwalseongKonSugangsaeng) continue;
+
+      const hasGibonBoonSueomnyo = sg.connectedSueomnyos.some(
+        (s) => s.boonNanoId === kon.gibonBoonNanoId,
+      );
+      if (!hasGibonBoonSueomnyo) {
+        this.addFinding(ctx, 'warning', 'sueomnyo-existence',
+          `sugangsaeng.connectedSueomnyos`,
+          `추가청구콘 "${kon.konName}"에 대한 수업료가 없음`,
+          '추가청구콘에 연결되어 있으나 기본 분에 대한 수업료가 생성되지 않았습니다.',
+          { scope: sgScope, evidence: { konNanoId: kon.nanoId, gibonBoonNanoId: kon.gibonBoonNanoId } },
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 4: Chulseok × Sueomnyo Cross-Validation
+  // README #6: Validate if sueomnyos and chulseok status for hoecha kon boons
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private phase4_validateChulseokVsSueomnyo(ctx: Ctx, sg: Sugangsaeng): void {
+    const sgScope: FindingScope = { sugangsaengNanoId: sg.nanoId };
+    const sueomnyoByBoon = new Map(
+      sg.connectedSueomnyos.filter((s) => s.boonNanoId !== null).map((s) => [s.boonNanoId!, s]),
+    );
+
+    for (const cwb of sg.connectedChulseokWorkBranches) {
+      const boonScope: FindingScope = { ...sgScope, boonNanoId: cwb.boonNanoId };
+      const category = cwb.hVector.hVectorHwaginCategory;
+      const sueomnyo = sueomnyoByBoon.get(cwb.boonNanoId);
+
+      // TODO: chulseok-site, chulseok-online, jigak → sueomnyo must exist
+      if (
+        (category === 'chulseok-site' || category === 'chulseok-online' || category === 'jigak') &&
+        !sueomnyo
+      ) {
+        this.addFinding(ctx, 'error', 'chulseok-sueomnyo', `sugangsaeng.connectedChulseokWorkBranches`,
+          `출결 "${category}"인데 수업료가 없음 (${cwb.workBranchName})`,
+          '출석/지각 처리가 되었으나 해당 분에 수업료가 생성되지 않았습니다.',
+          { scope: boonScope },
+        );
+      }
+
+      // TODO: chulseok-online → check allims for video link
+      if (category === 'chulseok-online' && sueomnyo) {
+        this.addFinding(ctx, 'info', 'chulseok-sueomnyo', `sugangsaeng.allims`,
+          `온라인 출석 — 영상 발송 여부 확인 필요 (${cwb.workBranchName})`,
+          '온라인 출석 처리가 되었습니다. 실제 영상 발송 여부를 allim 기록에서 확인하세요.',
+          { scope: boonScope },
+        );
+      }
+
+      // TODO: mihwagin, absent with sueomnyo that has nabip/minap → concern
+      if ((category === 'mihwagin' || category === 'absent') && sueomnyo) {
+        const activeBubuns = sueomnyo.bubunCheonggus.filter((b) => !b.isChwiso);
+        const hasNabip = activeBubuns.some((b) => b.nabipAmount > 0);
+        const hasMinap = activeBubuns.some((b) => b.minapAmount > 0);
+        if (hasNabip || hasMinap) {
+          this.addFinding(ctx, 'warning', 'chulseok-sueomnyo',
+            `sugangsaeng.connectedChulseokWorkBranches`,
+            `출결 "${category}"인데 수업료에 납입/미납이 존재 (${cwb.workBranchName})`,
+            category === 'mihwagin'
+              ? '출결이 미확인 상태인데 수업료 납입/미납이 기록되어 있습니다. 출결 확인이 필요합니다.'
+              : '결석인데 수업료 납입/미납이 존재합니다. 정상적인 청구인지 확인이 필요합니다.',
+            { scope: boonScope, evidence: { hasNabip, hasMinap, category } },
+          );
+        }
+      }
+
+      // TODO: other-boonban — sueomnyo may not exist but caution
+      if (category === 'other-boonban' && !sueomnyo) {
+        this.addFinding(ctx, 'info', 'chulseok-sueomnyo', `sugangsaeng.connectedChulseokWorkBranches`,
+          `다른분반 출석이나 수업료 없음 (${cwb.workBranchName})`,
+          '다른 분반 출석 처리가 되었으나 수업료가 없습니다. 같은 콘 내 다른 분에서 청구될 수 있습니다.',
+          { scope: boonScope },
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 5: Cross-Sugangsaeng Checks & Anomalies
+  // README #7: Other checkpoints and reporting factors
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private phase5_crossSugangsaengChecks(ctx: Ctx): void {
+    this.phase5_checkAmountOutliers(ctx);
+    this.phase5_checkBoonbanGroupMismatch(ctx);
+    this.phase5_checkBigoHarinConsistency(ctx);
+    this.phase5_checkChwisoHwalseongConsistency(ctx);
+  }
+
+  // ─── 5-1: Amount Outlier Detection ─────────────────────────────────────
+
+  private phase5_checkAmountOutliers(ctx: Ctx): void {
+    const activeSgs = ctx.input.sugangsaengs.filter((sg) => sg.isHwalseong);
+    if (activeSgs.length < 3) return;
+
+    const nabipBySg = activeSgs.map((sg) => {
+      const total = sg.connectedSueomnyos
+        .flatMap((s) => s.bubunCheonggus.filter((b) => !b.isChwiso))
+        .reduce((sum, b) => sum + b.nabipAmount, 0);
+      return { sg, total };
     });
-  }
 
-  for (const row of rows) {
-    const sgScope = { sugangsaengNanoId: row.sugangsaengNanoId, boonNanoId: null };
-
-    if (row.chayi !== 0) {
-      const isGyojaebiIncluded = gyojaeBi > 0 && Math.abs(row.chayi) === gyojaeBi;
-      const missedSessions = sessionAmount > 0 ? Math.abs(row.chayi) / sessionAmount : 0;
-      const isMissedMultiple = sessionAmount > 0 && missedSessions >= 1 && Math.abs(row.chayi) % sessionAmount === 0;
-
-      if (isGyojaebiIncluded) {
-        addFinding(
-          'warning',
-          'amount-guess',
-          '교재비가 포함되어 납입된 것으로 보입니다',
-          `차이(${row.chayi.toLocaleString()}원)가 교재비(${gyojaeBi.toLocaleString()}원)와 일치`,
-          { chayi: row.chayi, gyojaeBi },
-          '교재비 별도 청구 여부를 확인하세요',
-          sgScope,
-        );
-      } else if (isMissedMultiple) {
-        const n = Math.round(missedSessions);
-        addFinding(
-          'error',
-          'chulseok-sueomnyo',
-          `수강료 ${n}회분이 ${row.chayi < 0 ? '누락' : '초과'}된 것으로 보입니다`,
-          `1회 수강료: ${sessionAmount.toLocaleString()}원 × ${n}회 = ${Math.abs(row.chayi).toLocaleString()}원`,
-          { sessionAmount, missedCount: n, chayi: row.chayi },
-          row.chayi < 0
-            ? '해당 회차의 출결 기록 또는 청구 내역을 확인하세요'
-            : '중복 청구 또는 잘못된 회차 설정을 확인하세요',
-          sgScope,
-        );
-      } else {
-        addFinding(
-          'error',
-          'chulseok-sueomnyo',
-          `청구 금액과 계산 금액 불일치`,
-          `계산: ${row.gyesanAmount.toLocaleString()}원 / 납입: ${row.nabipAmount.toLocaleString()}원 (차이: ${row.chayi.toLocaleString()}원)`,
-          { gyesanAmount: row.gyesanAmount, nabipAmount: row.nabipAmount, chayi: row.chayi },
-          '실강횟수, 회차별 수업료, 할인 여부를 재확인하세요',
-          sgScope,
-        );
-      }
-    }
-
-    if (row.harinAmount > 0 && row.chayi > 0) {
-      const fullAmount = sessionAmount * totalBoons + gyojaeBi;
-      const expectedDiscount = fullAmount - row.gyesanAmount;
-      if (Math.abs(row.chayi) >= expectedDiscount * 0.8) {
-        addFinding(
-          'error',
-          'chulseok-sueomnyo',
-          `할인 적용이 납입액에 반영되지 않은 것으로 보입니다`,
-          `할인액: ${row.harinAmount.toLocaleString()}원 / 차이: ${row.chayi.toLocaleString()}원`,
-          { harinAmount: row.harinAmount, chayi: row.chayi },
-          '할인율 적용 여부를 재확인하세요',
-          sgScope,
-        );
-      }
-    }
-
-    const attendanceRate = totalBoons > 0 ? row.chulseokCount / totalBoons : 1;
-    if (attendanceRate < 0.5 && totalBoons >= 4) {
-      addFinding(
-        'warning',
-        'attendance',
-        `출석률 저조 (${(attendanceRate * 100).toFixed(0)}%)`,
-        `총 ${totalBoons}회 중 ${row.chulseokCount}회 출석`,
-        { totalBoons, chulseokCount: row.chulseokCount, attendanceRate: Math.round(attendanceRate * 100) },
-        '학생 상담 및 환불 검토가 필요합니다',
-        sgScope,
-      );
-    }
-
-    if (row.minapAmount > 0) {
-      addFinding(
-        'warning',
-        'sueomnyo-existence',
-        `미납액 ${row.minapAmount.toLocaleString()}원이 존재합니다`,
-        `납입: ${row.nabipAmount.toLocaleString()}원 / 미납: ${row.minapAmount.toLocaleString()}원`,
-        { nabipAmount: row.nabipAmount, minapAmount: row.minapAmount },
-        '미납 사유를 확인하고 수납을 요청하세요',
-        sgScope,
-      );
-    }
-
-    for (const cell of row.attendanceCells) {
-      if (cell.hVectorCategory === 'mihwagin') {
-        addFinding(
-          'warning',
-          'attendance',
-          `${cell.date} 출결 미확인 상태`,
-          `해당 일자의 출결이 확인되지 않았습니다`,
-          { date: cell.date },
-          '출결 상태를 확인하여 입력하세요',
-          { sugangsaengNanoId: row.sugangsaengNanoId, boonNanoId: null },
-        );
-        cell.highlight = { severity: 'warning', message: '출결 미확인' };
-      }
-    }
-
-    const absentCount = row.attendanceCells.filter((c) => c.hVectorCategory === 'absent').length;
-    if (absentCount > 0 && row.minapAmount === 0 && row.chayi === 0) {
-      addFinding(
-        'warning',
-        'amount-guess',
-        `결석 ${absentCount}회인데 수강료가 전액 납입되었습니다`,
-        `결석: ${absentCount}회 / 납입: ${row.nabipAmount.toLocaleString()}원 (기대: ${row.gyesanAmount.toLocaleString()}원)`,
-        { absentCount, nabipAmount: row.nabipAmount, gyesanAmount: row.gyesanAmount },
-        '환불 또는 보강 처리 여부를 확인하세요',
-        sgScope,
-      );
-    }
-
-    const jigakCount = row.attendanceCells.filter((c) => c.hVectorCategory === 'jigak').length;
-    const recordedCount = row.attendanceCells.filter((c) => c.hVectorCategory !== null).length;
-    if (jigakCount > 0 && recordedCount > 0 && jigakCount / recordedCount >= 0.5) {
-      addFinding(
-        'warning',
-        'attendance',
-        `지각(영상대체) 비율이 높습니다 (${jigakCount}/${recordedCount}회)`,
-        `전체 ${recordedCount}회 중 ${jigakCount}회 지각 처리`,
-        { jigakCount, recordedCount },
-        '실제 영상 발송 여부를 확인하세요',
-        sgScope,
-      );
-    }
-
-    if (row.chulseokCount === 0 && row.nabipAmount > 0) {
-      addFinding(
-        'error',
-        'chulseok-sueomnyo',
-        `출석 0회인데 납입액이 있습니다`,
-        `납입: ${row.nabipAmount.toLocaleString()}원 / 출석: 0회`,
-        { nabipAmount: row.nabipAmount, chulseokCount: 0 },
-        '수강료 청구 누락 또는 퇴원 처리 여부를 확인하세요',
-        sgScope,
-      );
-    }
-
-    if (row.nabipAmount === 0 && row.minapAmount === 0 && row.chulseokCount > 0) {
-      addFinding(
-        'error',
-        'chulseok-sueomnyo',
-        `출석 ${row.chulseokCount}회인데 납입액이 없습니다`,
-        `출석: ${row.chulseokCount}회 / 납입: 0원 / 미납: 0원`,
-        { chulseokCount: row.chulseokCount },
-        '수강료가 청구되지 않았을 수 있습니다. 확인하세요',
-        sgScope,
-      );
-    }
-
-    const filledCells = row.attendanceCells.filter((c) => c.hVectorCategory !== null);
-    const emptyCells = row.attendanceCells.filter((c) => c.hVectorCategory === null);
-    if (filledCells.length > 0 && emptyCells.length > 0) {
-      const firstFilledIdx = row.attendanceCells.findIndex((c) => c.hVectorCategory !== null);
-      const allLeadingEmpty = row.attendanceCells.slice(0, firstFilledIdx).every((c) => c.hVectorCategory === null);
-      const allTrailingFilled = row.attendanceCells.slice(firstFilledIdx).filter((c) => c.hVectorCategory === null).length === 0;
-      if (firstFilledIdx > 0 && allLeadingEmpty && allTrailingFilled) {
-        addFinding(
-          'info',
-          'enrollment',
-          `${firstFilledIdx + 1}회차부터 출석 — 중간 입반 추정`,
-          `${firstFilledIdx}회차까지 출결 기록 없음, ${firstFilledIdx + 1}회차부터 출석 시작`,
-          { firstAttendedSession: firstFilledIdx + 1, emptyBefore: firstFilledIdx },
-          '중간 입반 학생이면 정상입니다. 수강료 회차를 확인하세요',
-          sgScope,
-        );
-      }
-    }
-  }
-
-  const activeRows = rows.filter((r) => r.nabipAmount > 0);
-  if (activeRows.length >= 3) {
-    const amounts = activeRows.map((r) => r.nabipAmount);
-    const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-    const variance = amounts.reduce((a, b) => a + (b - mean) ** 2, 0) / amounts.length;
+    const amounts = nabipBySg.map((x) => x.total);
+    const mean = amounts.reduce((s, v) => s + v, 0) / amounts.length;
+    const variance = amounts.reduce((s, v) => s + (v - mean) ** 2, 0) / amounts.length;
     const stddev = Math.sqrt(variance);
 
-    if (stddev > 0) {
-      for (const row of activeRows) {
-        const zScore = Math.abs(row.nabipAmount - mean) / stddev;
-        if (zScore > 1.5) {
-          const isHighOutlier = row.nabipAmount > mean * 1.8;
-          const excessSessions = sessionAmount > 0 ? Math.round((row.nabipAmount - mean) / sessionAmount) : 0;
-          addFinding(
-            'warning',
-            'anomaly',
-            isHighOutlier
-              ? `납입액이 다른 학생보다 현저히 높습니다`
-              : `납입액이 다른 학생 대비 비정상적입니다`,
-            `납입: ${row.nabipAmount.toLocaleString()}원 / 평균: ${Math.round(mean).toLocaleString()}원 (z=${zScore.toFixed(1)})`,
-            { nabipAmount: row.nabipAmount, mean: Math.round(mean), zScore: parseFloat(zScore.toFixed(1)) },
-            isHighOutlier && excessSessions > 0
-              ? `이전 달 동영상 수강분(약 ${excessSessions}회분)이 합산된 것일 수 있습니다. 종이 출석부를 확인하세요`
-              : '납입 금액을 재확인하세요',
-            { sugangsaengNanoId: row.sugangsaengNanoId, boonNanoId: null },
-          );
-        }
-      }
-    }
-  }
+    if (stddev === 0) return;
 
-  if (gyojaeBi > 0 && activeRows.length >= 2) {
-    const expectedWithGyojae = sessionAmount * totalBoons + gyojaeBi;
-    const expectedWithout = sessionAmount * totalBoons;
-    const withGyojae: string[] = [];
-    const withoutGyojae: string[] = [];
-    for (const row of activeRows) {
-      const total = row.nabipAmount + row.minapAmount;
-      if (Math.abs(total - expectedWithGyojae) <= 1) withGyojae.push(row.sugangsaengName);
-      else if (Math.abs(total - expectedWithout) <= 1) withoutGyojae.push(row.sugangsaengName);
-    }
-    if (withGyojae.length > 0 && withoutGyojae.length > 0) {
-      for (const row of activeRows) {
-        const total = row.nabipAmount + row.minapAmount;
-        if (Math.abs(total - expectedWithout) <= 1) {
-          addFinding(
-            'warning',
-            'amount-guess',
-            `교재비가 포함되지 않은 것으로 보입니다`,
-            `납입+미납: ${total.toLocaleString()}원 / 교재비 포함 시: ${expectedWithGyojae.toLocaleString()}원`,
-            { total, expectedWithGyojae, gyojaeBi },
-            `같은 반 ${withGyojae.length}명은 교재비 포함 금액입니다. 교재비 청구 여부를 확인하세요`,
-            { sugangsaengNanoId: row.sugangsaengNanoId, boonNanoId: null },
-          );
-        }
-      }
-    }
-  }
-
-  if (rows.length > 0) {
-    const boonCount = rows[0].attendanceCells.length;
-    for (let bi = 0; bi < boonCount; bi += 1) {
-      const date = rows[0].attendanceCells[bi]?.date;
-      if (!date) continue;
-      const allEmpty = rows.every((r) => r.attendanceCells[bi]?.hVectorCategory === null);
-      const allAbsent = rows.every((r) => {
-        const cat = r.attendanceCells[bi]?.hVectorCategory;
-        return cat === null || cat === 'absent';
-      });
-      if (allEmpty || allAbsent) {
-        const hasAnyRecord = rows.some((r) =>
-          r.attendanceCells.some((c, ci) => ci !== bi && c.hVectorCategory !== null),
+    for (const { sg, total } of nabipBySg) {
+      const zScore = Math.abs(total - mean) / stddev;
+      if (zScore > 1.5) {
+        this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.nabipAmount',
+          `${sg.name}의 납입액(${total.toLocaleString()})이 평균(${Math.round(mean).toLocaleString()})과 크게 다름`,
+          '다른 수강생들과 납입액이 유의미하게 차이가 납니다. 할인, 추가청구, 또는 오입력 여부를 확인하세요.',
+          {
+            scope: { sugangsaengNanoId: sg.nanoId },
+            evidence: { nabipAmount: total, mean: Math.round(mean), stddev: Math.round(stddev), zScore: Math.round(zScore * 100) / 100 },
+          },
         );
-        if (hasAnyRecord) {
-          const isFirstSession = bi === 0;
-          addFinding(
-            'info',
-            'schedule',
-            isFirstSession
-              ? `${date} (1회차) — 전체 학생 출결 미입력`
-              : `${date} — 전체 학생 출결 기록 없음`,
-            isFirstSession
-              ? `첫 수업은 명단 미확정으로 종이 출석부만 기록된 경우가 많습니다`
-              : `해당 일자에 모든 학생의 출결이 비어있습니다`,
-            { date, sessionIndex: bi + 1 },
-            isFirstSession
-              ? '종이 출석부를 확인하여 아카에 입력하세요'
-              : '휴강이었다면 정상입니다. 출결 누락이 아닌지 확인하세요',
-            { sugangsaengNanoId: null, boonNanoId: null },
+      }
+    }
+  }
+
+  // ─── 5-2: Boonban Group Mismatch ───────────────────────────────────────
+
+  private phase5_checkBoonbanGroupMismatch(ctx: Ctx): void {
+    for (const sg of ctx.input.sugangsaengs) {
+      if (!sg.boonbanSugangsaengGroupNanoId) continue;
+
+      for (const boon of sg.connectedBoons) {
+        if (!boon.boonbanSugangsaengGroupNanoId) continue;
+        if (boon.boonbanSugangsaengGroupNanoId === sg.boonbanSugangsaengGroupNanoId) continue;
+
+        const chulseok = sg.connectedChulseokWorkBranches.find((c) => c.boonNanoId === boon.boonNanoId);
+        const hwaginCategory = chulseok?.hVector.hVectorHwaginCategory;
+        if (hwaginCategory === 'other-boonban') continue;
+
+        this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.boonbanGroup',
+          `${sg.name}이(가) 다른 분반 그룹의 분 "${boon.boonName}"에 출석`,
+          `수강생은 "${sg.boonbanSugangsaengGroupName}" 소속이나 "${boon.boonbanSugangsaengGroupName}" 분반의 분에 출석 기록이 있습니다.`,
+          {
+            scope: { sugangsaengNanoId: sg.nanoId, boonNanoId: boon.boonNanoId },
+            evidence: {
+              sgGroupNanoId: sg.boonbanSugangsaengGroupNanoId,
+              boonGroupNanoId: boon.boonbanSugangsaengGroupNanoId,
+            },
+          },
+        );
+      }
+    }
+  }
+
+  // ─── 5-3: Bigo ↔ Harin Consistency ────────────────────────────────────
+
+  private phase5_checkBigoHarinConsistency(ctx: Ctx): void {
+    for (const sg of ctx.input.sugangsaengs) {
+      for (const sm of sg.connectedSueomnyos) {
+        const activeBubuns = sm.bubunCheonggus.filter((b) => !b.isChwiso);
+        const totalHarin = activeBubuns.reduce((s, b) => s + b.harinAmount, 0);
+
+        const bigoTexts = [
+          sm.cheongguBigo,
+          ...activeBubuns.map((b) => b.bubunCheongguBigo),
+        ].filter(Boolean) as string[];
+
+        const mentionsHarin = bigoTexts.some((t) => t.includes('할인'));
+
+        if (mentionsHarin && totalHarin === 0) {
+          this.addFinding(ctx, 'warning', 'anomaly', 'sugangsaeng.connectedSueomnyos.bigo',
+            `${sg.name}의 수업료 "${sm.cheongguName}" 비고에 할인 언급이 있으나 할인 금액이 0`,
+            '비고에 할인 관련 내용이 작성되어 있으나 실제 할인 금액이 적용되지 않았습니다.',
+            {
+              scope: { sugangsaengNanoId: sg.nanoId, cheongguNanoId: sm.cheongguNanoId },
+              evidence: { bigoTexts, totalHarin },
+            },
           );
         }
       }
     }
   }
 
-  for (const row of rows) {
-    row.findings = findings.filter(
-      (f) => f.scope?.sugangsaengNanoId === row.sugangsaengNanoId || f.scope?.sugangsaengNanoId === null,
-    );
-  }
+  // ─── 5-4: Chwiso / isHwalseong Consistency ────────────────────────────
 
-  return findings;
-}
-
-export class SueopAggregateValidatorStrategy
-  implements ValidatorStrategy<SueopAggregateInput, SueopAggregateReport> {
-  id: string;
-
-  constructor(id: string) {
-    this.id = id;
-  }
-
-  run(input: SueopAggregateInput): ValidatorResult<SueopAggregateReport> {
-    const { sueop, sugangsaengs, queryPeriod } = input;
-
-    const hoechaKon = sueop.kons.find((k) => k.konCategory === 'hoecha');
-    const chugaKon = sueop.kons.find((k) => k.konCategory === 'chuga-cheonggu');
-    const sessionAmount = hoechaKon?.gibonBoonAmount ?? sueop.amount;
-    const gyojaeBi = chugaKon?.gibonBoonAmount ?? 0;
-
-    const hoechaBoons = sueop.boons.filter((b) => {
-      if (chugaKon) {
-        return b.nanoId !== chugaKon.gibonBoonNanoId;
+  private phase5_checkChwisoHwalseongConsistency(ctx: Ctx): void {
+    for (const sg of ctx.input.sugangsaengs) {
+      // Chwiso bubunCheonggu should have nabip=0, minap=0
+      for (const sm of sg.connectedSueomnyos) {
+        for (const bc of sm.bubunCheonggus) {
+          if (bc.isChwiso && (bc.nabipAmount !== 0 || bc.minapAmount !== 0)) {
+            this.addFinding(ctx, 'error', 'consistency', 'sugangsaeng.connectedSueomnyos.bubunCheonggus',
+              `${sg.name}의 취소된 부분청구 "${bc.name}"에 납입/미납 금액이 존재`,
+              '취소 상태의 부분청구에 금액이 남아 있습니다. 취소 처리가 올바르게 되지 않았을 수 있습니다.',
+              {
+                scope: { sugangsaengNanoId: sg.nanoId, cheongguNanoId: sm.cheongguNanoId },
+                evidence: { bubunCheongguNanoId: bc.nanoId, nabipAmount: bc.nabipAmount, minapAmount: bc.minapAmount },
+              },
+            );
+          }
+        }
       }
-      return true;
-    });
-    const totalBoons = hoechaBoons.length;
 
-    const boonDates = hoechaBoons.map((b) => ({
-      nanoId: b.nanoId,
-      date: b.name,
-    }));
+      // !isHwalseong sugangsaeng with active connections → warning
+      if (!sg.isHwalseong) {
+        const hasActiveConnections =
+          sg.connectedBoons.some((b) => b.isHwalseongBoonSugangsaeng) ||
+          sg.connectedKons.some((k) => k.isHwalseongKonSugangsaeng);
 
-    const analysisRows = sugangsaengs.map((sg) =>
-      buildAnalysisRow(sg, boonDates, sessionAmount, totalBoons, gyojaeBi),
+        if (hasActiveConnections) {
+          this.addFinding(ctx, 'warning', 'consistency', 'sugangsaeng.isHwalseong',
+            `비활성 수강생 ${sg.name}에 활성 상태의 분/콘 연결이 존재`,
+            '수강생이 비활성 상태이나 분 또는 콘에 활성 연결이 남아 있습니다. 연결 해제가 필요할 수 있습니다.',
+            { scope: { sugangsaengNanoId: sg.nanoId } },
+          );
+        }
+
+        const hasNonZeroAmount = sg.connectedSueomnyos.some((sm) =>
+          sm.bubunCheonggus.some((b) => !b.isChwiso && (b.nabipAmount > 0 || b.minapAmount > 0)),
+        );
+
+        if (hasNonZeroAmount) {
+          this.addFinding(ctx, 'warning', 'consistency', 'sugangsaeng.isHwalseong',
+            `비활성 수강생 ${sg.name}에 납입/미납 금액이 존재`,
+            '수강생이 비활성 상태이나 납입 또는 미납 금액이 남아 있습니다.',
+            { scope: { sugangsaengNanoId: sg.nanoId } },
+          );
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Report Builder
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private buildReport(ctx: Ctx): SueopAggregateReport {
+    const allFindings = ctx.findings;
+    const globalFindings = allFindings.filter((f) => !f.scope?.sugangsaengNanoId);
+
+    const analysisRows: SugangsaengAnalysisRow[] = ctx.input.sugangsaengs.map((sg) =>
+      this.buildAnalysisRow(ctx, sg),
     );
 
-    const findings = generateFindings(analysisRows, input, sessionAmount, totalBoons, gyojaeBi);
+    const sueopSummary = this.buildSueopSummary(ctx, analysisRows);
 
-    const errorCount = findings.filter((f) => f.severity === 'error').length;
-    const warningCount = findings.filter((f) => f.severity === 'warning').length;
-    const infoCount = findings.filter((f) => f.severity === 'info').length;
+    const errorCount = allFindings.filter((f) => f.severity === 'error').length;
+    const warningCount = allFindings.filter((f) => f.severity === 'warning').length;
+    const infoCount = allFindings.filter((f) => f.severity === 'info').length;
 
-    const nabipTotal = analysisRows.reduce((a, r) => a + r.nabipAmount, 0);
-    const minapTotal = analysisRows.reduce((a, r) => a + r.minapAmount, 0);
-    const harinTotal = analysisRows.reduce((a, r) => a + r.harinAmount, 0);
-    const expectedTotalAmount = (sessionAmount * totalBoons + gyojaeBi) * sugangsaengs.length;
-    const totalChayi = analysisRows.reduce((a, r) => a + r.chayi, 0);
+    const findingsByCategory: Record<string, ValidationFinding[]> = {};
+    for (const finding of allFindings) {
+      if (!findingsByCategory[finding.category]) {
+        findingsByCategory[finding.category] = [];
+      }
+      findingsByCategory[finding.category].push(finding);
+    }
 
-    const report: SueopAggregateReport = {
-      sueopName: sueop.name,
-      sueopNanoId: sueop.nanoId,
-      queryPeriod,
-      analysisRows,
-      findings,
-      sueopSummary: {
-        expectedTotalAmount,
-        inScope: { nabipTotal, minapTotal, harinTotal },
-        totalChayi,
-        errorCount,
-        warningCount,
-        infoCount,
-        enrollment: {
-          totalSugangsaeng: sugangsaengs.length,
-          activeSugangsaeng: sugangsaengs.length,
-        },
-      },
+    return {
+      isValid: errorCount === 0,
       summary: { errorCount, warningCount, infoCount },
-      amountBreakdown: {
-        lines: [
-          { label: '수업료', amount: sessionAmount * totalBoons * sugangsaengs.length },
-          ...(gyojaeBi > 0 ? [{ label: '교재비', amount: gyojaeBi * sugangsaengs.length }] : []),
-          ...(harinTotal > 0 ? [{ label: '할인', amount: -harinTotal }] : []),
-        ],
-        total: expectedTotalAmount - harinTotal,
-      },
+      findings: allFindings,
+      findingsByCategory,
+      analysisRows,
+      sueopSummary,
+      globalFindings,
+    };
+  }
+
+  // ─── Analysis Row Builder ────────────────────────────────────────────────
+
+  private buildAnalysisRow(ctx: Ctx, sg: Sugangsaeng): SugangsaengAnalysisRow {
+    const sgFindings = ctx.findings.filter((f) => f.scope?.sugangsaengNanoId === sg.nanoId);
+    const chulseokByBoon = new Map<string, typeof sg.connectedChulseokWorkBranches[number]>();
+    for (const cwb of sg.connectedChulseokWorkBranches) {
+      chulseokByBoon.set(cwb.boonNanoId, cwb);
+    }
+    const sueomnyoByBoon = new Map(
+      sg.connectedSueomnyos.filter((s) => s.boonNanoId !== null).map((s) => [s.boonNanoId!, s]),
+    );
+
+    // --- Attendance cells (ordered by date) ---
+    const attendanceCells: AttendanceCell[] = sg.connectedBoons
+      .map((boon): AttendanceCell => {
+        const cwb = chulseokByBoon.get(boon.boonNanoId);
+        const sueomnyo = sueomnyoByBoon.get(boon.boonNanoId);
+        const boonFindings = sgFindings.filter((f) => f.scope?.boonNanoId === boon.boonNanoId);
+        const worstSeverity = this.getWorstSeverity(boonFindings);
+
+        return {
+          boonNanoId: boon.boonNanoId,
+          boonName: boon.boonName,
+          date: boon.boonIljeong?.startAt ?? null,
+          hwaginCategory: cwb?.hVector.hVectorHwaginCategory ?? null,
+          yejeongCategory: cwb?.hVector.hVectorYejeongCategory ?? null,
+          hasSueomnyo: sueomnyo !== undefined,
+          sueomnyoNanoId: sueomnyo?.cheongguNanoId ?? null,
+          bigo: cwb?.hVector.hVectorBigo ?? null,
+          highlight: worstSeverity
+            ? { severity: worstSeverity, message: boonFindings[0]?.message ?? '' }
+            : null,
+        };
+      })
+      .sort((a, b) => {
+        if (!a.date && !b.date) return 0;
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date.localeCompare(b.date);
+      });
+
+    // --- Attendance counts ---
+    const billableAttendanceCount = attendanceCells.filter(
+      (c) => c.hwaginCategory !== null && BILLABLE_CATEGORIES.includes(c.hwaginCategory),
+    ).length;
+    const totalAttendanceCount = attendanceCells.filter((c) => c.hwaginCategory !== null).length;
+
+    // --- Sueomnyo timing details (with scope classification) ---
+    const sueomnyoTimingDetails = this.buildTimingDetails(ctx, sg);
+
+    // --- Amount computation by scope ---
+    const inScopeDetails = sueomnyoTimingDetails.filter((d) => d.scopeCategory === 'in-scope');
+    const relatedDetails = sueomnyoTimingDetails.filter((d) => d.scopeCategory === 'related');
+
+    const inScope = {
+      nabipAmount: inScopeDetails.reduce((s, d) => s + d.totalNabipAmount, 0),
+      minapAmount: inScopeDetails.reduce((s, d) => s + d.totalMinapAmount, 0),
+      harinAmount: inScopeDetails.reduce((s, d) => s + d.totalHarinAmount, 0),
+      sueomnyoCount: inScopeDetails.length,
+    };
+    const related = {
+      nabipAmount: relatedDetails.reduce((s, d) => s + d.totalNabipAmount, 0),
+      minapAmount: relatedDetails.reduce((s, d) => s + d.totalMinapAmount, 0),
+      harinAmount: relatedDetails.reduce((s, d) => s + d.totalHarinAmount, 0),
+      sueomnyoCount: relatedDetails.length,
     };
 
-    return { success: true, payload: report };
+    const nabipAmount = inScope.nabipAmount;
+    const minapAmount = inScope.minapAmount;
+    const harinAmount = inScope.harinAmount;
+    const totalInScopeActual = inScopeDetails.reduce((s, d) => s + d.totalActualAmount, 0);
+    const harinRate = totalInScopeActual > 0 ? Math.round((harinAmount / (totalInScopeActual + harinAmount)) * 100) : 0;
+    const hasRelatedAmounts = related.nabipAmount > 0 || related.minapAmount > 0;
+
+    // --- Gyesan (expected) amount ---
+    const gyesanAmount = this.computeGyesanAmount(ctx, sg, billableAttendanceCount);
+    const chayi = nabipAmount - gyesanAmount;
+
+    // --- Amount breakdown ---
+    const actualTotal = nabipAmount + minapAmount;
+    const amountBreakdown = this.buildAmountBreakdown(ctx, sg, billableAttendanceCount, actualTotal);
+
+    // --- Enrollment context ---
+    const enrollmentContext = this.buildEnrollmentContext(ctx, sg);
+
+    // --- Connection status ---
+    const hasError = sgFindings.some((f) => f.severity === 'error');
+    const hasWarning = sgFindings.some((f) => f.severity === 'warning');
+    const connectionStatus: SugangsaengAnalysisRow['connectionStatus'] = hasError
+      ? 'error'
+      : hasWarning
+        ? 'warning'
+        : 'normal';
+
+    // --- Highlights ---
+    const nabipHighlight = chayi !== 0 ? { severity: 'warning' as FindingSeverity, message: `차이: ${chayi > 0 ? '+' : ''}${chayi.toLocaleString()}` } : null;
+    const chayiHighlight = chayi !== 0 ? { severity: 'error' as FindingSeverity, message: `납입액과 계산액 차이` } : null;
+    const harinHighlight = this.buildHarinHighlight(sg, harinRate);
+    const statusHighlight: CellHighlight | null = connectionStatus !== 'normal'
+      ? { severity: connectionStatus, message: sgFindings.find((f) => f.severity === connectionStatus)?.message ?? '' }
+      : null;
+
+    // --- Related amounts finding ---
+    if (hasRelatedAmounts) {
+      this.addFinding(ctx, 'info', 'timing', 'sugangsaeng.connectedSueomnyos',
+        `조회 기간 외 청구 ${related.sueomnyoCount}건에 대해 납입/미납 활동이 이번 기간에 발생`,
+        `청구일자가 조회 기간 밖이지만 이번 기간에 납입(${related.nabipAmount.toLocaleString()}) 또는 미납(${related.minapAmount.toLocaleString()})이 있습니다.`,
+        {
+          scope: { sugangsaengNanoId: sg.nanoId },
+          evidence: { relatedNabip: related.nabipAmount, relatedMinap: related.minapAmount, relatedCount: related.sueomnyoCount },
+        },
+      );
+    }
+
+    return {
+      sugangsaengNanoId: sg.nanoId,
+      sugangsaengName: sg.name,
+      isHwalseong: sg.isHwalseong,
+      boonbanGroupName: sg.boonbanSugangsaengGroupName ?? null,
+      attendanceCells,
+      harinRate,
+      harinAmount,
+      harinHighlight,
+      connectionStatus,
+      statusHighlight,
+      billableAttendanceCount,
+      totalAttendanceCount,
+      amountBreakdown,
+      enrollmentContext,
+      inScope,
+      related,
+      nabipAmount,
+      nabipHighlight,
+      minapAmount,
+      gyesanAmount,
+      chayi,
+      chayiHighlight,
+      hasRelatedAmounts,
+      sueomnyoTimingDetails,
+      findings: sgFindings,
+    };
+  }
+
+  // ─── Gyesan Amount Computation ───────────────────────────────────────────
+
+  private computeGyesanAmount(ctx: Ctx, sg: Sugangsaeng, billableCount: number): number {
+    // Hoecha part: billable attendance × rate
+    // Rate resolution: boon.amount → sueop.amount (fallback)
+    let hoechaAmount = 0;
+    const hoechaBoons = sg.connectedBoons.filter((b) => {
+      const konCategory = this.getKonCategoryForBoon(ctx, b.konNanoId);
+      return konCategory === 'hoecha';
+    });
+
+    if (hoechaBoons.length > 0) {
+      // TODO: per-boon rate might differ. For now use a single rate across all hoecha boons.
+      const firstBoon = hoechaBoons[0];
+      const sueopBoon = ctx.derived.sueopBoonMap.get(firstBoon.boonNanoId);
+      const rate = sueopBoon?.amount ?? ctx.input.sueop.amount ?? 0;
+      hoechaAmount = billableCount * rate;
+    }
+
+    // Chuga-cheonggu part: sum of kon gibonBoonAmount for connected chuga-cheonggu kons
+    let chugaCheongguAmount = 0;
+    for (const kon of sg.connectedKons) {
+      if (kon.category === 'chuga-cheonggu' && kon.isHwalseongKonSugangsaeng) {
+        const sueopKon = ctx.derived.sueopKonMap.get(kon.nanoId);
+        chugaCheongguAmount += sueopKon?.gibonBoonAmount ?? 0;
+      }
+    }
+
+    return hoechaAmount + chugaCheongguAmount;
+  }
+
+  // ─── Amount Breakdown Builder ──────────────────────────────────────────
+
+  private buildAmountBreakdown(ctx: Ctx, sg: Sugangsaeng, billableCount: number, actualTotal: number): AmountBreakdown {
+    const lines: AmountBreakdownLine[] = [];
+
+    const hoechaBoons = sg.connectedBoons.filter((b) =>
+      this.getKonCategoryForBoon(ctx, b.konNanoId) === 'hoecha',
+    );
+    if (hoechaBoons.length > 0) {
+      const firstBoon = hoechaBoons[0];
+      const sueopBoon = ctx.derived.sueopBoonMap.get(firstBoon.boonNanoId);
+      const rate = sueopBoon?.amount ?? ctx.input.sueop.amount ?? 0;
+      if (rate > 0 && billableCount > 0) {
+        lines.push({
+          label: '회차 수강료',
+          konCategory: 'hoecha',
+          unitAmount: rate,
+          count: billableCount,
+          subtotal: rate * billableCount,
+          isGuessed: false,
+        });
+      }
+    }
+
+    for (const kon of sg.connectedKons) {
+      if (kon.category === 'chuga-cheonggu' && kon.isHwalseongKonSugangsaeng) {
+        const sueopKon = ctx.derived.sueopKonMap.get(kon.nanoId);
+        const amount = sueopKon?.gibonBoonAmount ?? 0;
+        if (amount > 0) {
+          lines.push({
+            label: sueopKon?.name ?? '추가청구',
+            konCategory: 'chuga-cheonggu',
+            unitAmount: amount,
+            count: 1,
+            subtotal: amount,
+            isGuessed: false,
+          });
+        }
+      }
+    }
+
+    const calculatedTotal = lines.reduce((s, l) => s + l.subtotal, 0);
+    const delta = actualTotal - calculatedTotal;
+
+    const parts = lines.map((l) =>
+      l.count > 1 ? `${l.unitAmount.toLocaleString()} × ${l.count}회` : `${l.label} ${l.subtotal.toLocaleString()}`,
+    );
+    const explanation = parts.length > 0
+      ? `${parts.join(' + ')} = ${calculatedTotal.toLocaleString()}`
+      : '금액 구성 요소 없음';
+
+    return {
+      lines,
+      calculatedTotal,
+      actualTotal,
+      delta,
+      isFullyExplained: delta === 0,
+      explanation,
+    };
+  }
+
+  // ─── Enrollment Context Builder ────────────────────────────────────────
+
+  private buildEnrollmentContext(ctx: Ctx, sg: Sugangsaeng): EnrollmentContext {
+    const naeyeoks = sg.sugangNaeyeoks ?? [];
+    const ipbanDates = naeyeoks.map((n) => n.ipbanAt).sort();
+    const toebanDates = naeyeoks.map((n) => n.toebanAt).filter(Boolean) as string[];
+
+    const ipbanAt = ipbanDates[0] ?? null;
+    const toebanAt = toebanDates.length > 0 ? toebanDates[toebanDates.length - 1] : null;
+
+    const periodStart = new Date(ctx.input.queryPeriod.startAt);
+    const periodEnd = new Date(ctx.input.queryPeriod.endAt);
+
+    const enteredDuringPeriod = ipbanAt !== null
+      && new Date(ipbanAt) >= periodStart
+      && new Date(ipbanAt) <= periodEnd;
+
+    const leftDuringPeriod = toebanAt !== null
+      && new Date(toebanAt) >= periodStart
+      && new Date(toebanAt) <= periodEnd;
+
+    const hasPriorMonthActivity = sg.connectedSueomnyos.some((sm) => {
+      if (sm.cheongguAt && new Date(sm.cheongguAt) < periodStart) return true;
+      return sg.connectedBoons.some((b) =>
+        b.boonIljeong && new Date(b.boonIljeong.startAt) < periodStart,
+      );
+    });
+
+    return { ipbanAt, toebanAt, enteredDuringPeriod, leftDuringPeriod, hasPriorMonthActivity };
+  }
+
+  // ─── Timing Details Builder ──────────────────────────────────────────────
+
+  private buildTimingDetails(ctx: Ctx, sg: Sugangsaeng): SueomnyoTimingDetail[] {
+    const { queryPeriod } = ctx.input;
+
+    return sg.connectedSueomnyos.map((sm) => {
+      const activeBubuns = sm.bubunCheonggus.filter((b) => !b.isChwiso);
+      const totalNabip = activeBubuns.reduce((s, b) => s + b.nabipAmount, 0);
+      const totalMinap = activeBubuns.reduce((s, b) => s + b.minapAmount, 0);
+      const totalHarin = activeBubuns.reduce((s, b) => s + b.harinAmount, 0);
+      const totalActual = activeBubuns.reduce((s, b) => s + b.actualAmount, 0);
+
+      const nabipTimestamp = this.resolveNabipTimestamp(activeBubuns);
+
+      const konCategory = sm.boonNanoId
+        ? this.getKonCategoryForBoon(ctx, sg.connectedBoons.find((b) => b.boonNanoId === sm.boonNanoId)?.konNanoId ?? '')
+        : null;
+
+      const scopeCategory = this.classifySueomnyoScope(sm, nabipTimestamp, queryPeriod);
+
+      return {
+        cheongguNanoId: sm.cheongguNanoId,
+        cheongguName: sm.cheongguName,
+        boonNanoId: sm.boonNanoId,
+        konCategory,
+        scopeCategory,
+        cheongguCreatedAt: sm.createdAt ?? null,
+        cheongguAt: sm.cheongguAt,
+        nabipTimestamp,
+        totalActualAmount: totalActual,
+        totalNabipAmount: totalNabip,
+        totalMinapAmount: totalMinap,
+        totalHarinAmount: totalHarin,
+        hasConcern: totalMinap > 0,
+      };
+    });
+  }
+
+  private resolveNabipTimestamp(bubuns: BubunCheonggu[]): string | null {
+    for (const b of bubuns) {
+      if (b.sunap?.sunapLatestBubunGyeoljeUpdateAt) return b.sunap.sunapLatestBubunGyeoljeUpdateAt;
+      if (b.sunap?.createdAt) return b.sunap.createdAt;
+      if (b.updatedAt != null) return b.updatedAt;
+    }
+    return null;
+  }
+
+  // ─── Sueop Summary Builder ──────────────────────────────────────────────
+
+  private buildSueopSummary(ctx: Ctx, rows: SugangsaengAnalysisRow[]): SueopSummary {
+    return {
+      sueopNanoId: ctx.input.sueop.nanoId,
+      sueopName: ctx.input.sueop.name,
+      queryPeriod: ctx.input.queryPeriod,
+      totalSugangsaengCount: rows.length,
+      activeSugangsaengCount: rows.filter((r) => r.isHwalseong).length,
+      totalBillableAttendanceCount: rows.reduce((s, r) => s + r.billableAttendanceCount, 0),
+      expectedTotalAmount: rows.reduce((s, r) => s + r.gyesanAmount, 0),
+      inScope: {
+        nabipTotal: rows.reduce((s, r) => s + r.inScope.nabipAmount, 0),
+        minapTotal: rows.reduce((s, r) => s + r.inScope.minapAmount, 0),
+        harinTotal: rows.reduce((s, r) => s + r.inScope.harinAmount, 0),
+      },
+      related: {
+        nabipTotal: rows.reduce((s, r) => s + r.related.nabipAmount, 0),
+        minapTotal: rows.reduce((s, r) => s + r.related.minapAmount, 0),
+        harinTotal: rows.reduce((s, r) => s + r.related.harinAmount, 0),
+        sugangsaengCount: rows.filter((r) => r.hasRelatedAmounts).length,
+      },
+      totalChayi: rows.reduce((s, r) => s + r.chayi, 0),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Helpers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private classifySueomnyoScope(
+    sm: ConnectedSueomnyo,
+    nabipTimestamp: string | null,
+    queryPeriod: QueryPeriod,
+  ): SueomnyoScopeCategory {
+    const periodStart = new Date(queryPeriod.startAt);
+    const periodEnd = new Date(queryPeriod.endAt);
+
+    const cheongguDate = sm.cheongguAt ? new Date(sm.cheongguAt) : null;
+    const cheongguInScope = cheongguDate !== null && cheongguDate >= periodStart && cheongguDate <= periodEnd;
+
+    if (cheongguInScope) return 'in-scope';
+
+    const nabipDate = nabipTimestamp ? new Date(nabipTimestamp) : null;
+    const nabipInPeriod = nabipDate !== null && nabipDate >= periodStart && nabipDate <= periodEnd;
+
+    const sunapDates = sm.bubunCheonggus
+      .filter((b) => !b.isChwiso && b.sunap)
+      .map((b) => new Date(b.sunap!.createdAt));
+    const anySunapInPeriod = sunapDates.some((d) => d >= periodStart && d <= periodEnd);
+
+    if (nabipInPeriod || anySunapInPeriod) return 'related';
+
+    return 'out-of-scope';
+  }
+
+  private getKonCategoryForBoon(ctx: Ctx, konNanoId: string): 'hoecha' | 'chuga-cheonggu' | null {
+    return ctx.derived.sueopKonMap.get(konNanoId)?.konCategory ?? null;
+  }
+
+  private getWorstSeverity(findings: ValidationFinding[]): FindingSeverity | null {
+    if (findings.some((f) => f.severity === 'error')) return 'error';
+    if (findings.some((f) => f.severity === 'warning')) return 'warning';
+    if (findings.some((f) => f.severity === 'info')) return 'info';
+    return null;
+  }
+
+  private buildHarinHighlight(sg: Sugangsaeng, harinRate: number): CellHighlight | null {
+    // If bigo mentions 할인 but rate is 0, or rate is nonzero and unexpected
+    const hasBigoHarin = sg.connectedSueomnyos.some(
+      (s) => s.cheongguBigo?.includes('할인') || s.bubunCheonggus.some((b) => b.bubunCheongguBigo?.includes('할인')),
+    );
+    if (hasBigoHarin && harinRate === 0) {
+      return { severity: 'warning', message: '비고에 할인 언급이 있으나 할인 금액이 0' };
+    }
+    if (harinRate > 0) {
+      return { severity: 'info', message: `할인 ${harinRate}% 적용됨` };
+    }
+    return null;
+  }
+
+  // ─── Finding Helpers ────────────────────────────────────────────────────
+
+  protected addFinding(
+    ctx: Ctx,
+    severity: FindingSeverity,
+    category: string,
+    field: string,
+    message: string,
+    reason: string,
+    options?: { scope?: FindingScope; evidence?: Record<string, unknown>; suggestion?: string },
+  ): void {
+    ctx.findings.push({
+      severity,
+      category,
+      field,
+      message,
+      reason,
+      scope: options?.scope,
+      evidence: options?.evidence,
+      suggestion: options?.suggestion,
+    });
   }
 }
