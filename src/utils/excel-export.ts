@@ -25,9 +25,10 @@ const statusLabel: Record<string, string> = {
   'on-hold': '보류',
 };
 
-function serializeEvidence(evidence: Record<string, string | number>): string {
+function serializeEvidence(evidence: Record<string, unknown> | undefined): string {
+  if (!evidence) return '';
   return Object.entries(evidence)
-    .map(([k, v]) => `${k}: ${v}`)
+    .map(([k, v]) => `${k}: ${String(v)}`)
     .join(', ');
 }
 
@@ -70,8 +71,8 @@ export async function exportValidationReport(
       f.message,
       f.reason,
       serializeEvidence(f.evidence),
-      f.suggestion,
-      statusLabel[findingStatuses[f.id] ?? 'pending'] ?? '미처리',
+      f.suggestion ?? '',
+      statusLabel[findingStatuses[(f as { id?: string }).id ?? `f-${String(i + 1).padStart(3, '0')}`] ?? 'pending'] ?? '미처리',
     ]);
   });
 

@@ -38,20 +38,27 @@ export function Step2Validation() {
   );
   const normalCount = (report?.analysisRows.length ?? 0) - issueStudentNames.size;
 
-  const rowFindingsMap: Record<number, Array<{ id: string; severity: FindingSeverity; message: string; reason: string; suggestion: string }>> = {};
+  const rowFindingsMap: Record<number, Array<{ id: string; severity: FindingSeverity; message: string; reason: string; suggestion?: string }>> = {};
   if (report) {
     report.analysisRows.forEach((row, rowIdx) => {
       const pending = row.findings.filter(
-        (f) => (f.severity === 'error' || f.severity === 'warning' || f.severity === 'info') && (findingStatuses[f.id] ?? 'pending') === 'pending',
+        (f) => {
+          const fAny = f as { id?: string };
+          return (f.severity === 'error' || f.severity === 'warning' || f.severity === 'info')
+            && (findingStatuses[fAny.id ?? ''] ?? 'pending') === 'pending';
+        },
       );
       if (pending.length > 0) {
-        rowFindingsMap[rowIdx] = pending.map((f) => ({
-          id: f.id,
-          severity: f.severity,
-          message: f.message,
-          reason: f.reason,
-          suggestion: f.suggestion,
-        }));
+        rowFindingsMap[rowIdx] = pending.map((f) => {
+          const fAny = f as { id?: string };
+          return {
+            id: fAny.id ?? `rf-${rowIdx}-${Math.random().toString(36).slice(2, 8)}`,
+            severity: f.severity,
+            message: f.message,
+            reason: f.reason,
+            suggestion: f.suggestion,
+          };
+        });
       }
     });
   }
@@ -67,12 +74,15 @@ export function Step2Validation() {
         highlights.push({ row: rowIdx, col: 'status', severity: row.statusHighlight.severity });
       }
       for (const cell of row.attendanceCells) {
-        if (cell.highlight) {
+        if (cell.highlight && cell.date) {
           highlights.push({ row: rowIdx, col: cell.date, severity: cell.highlight.severity });
         }
       }
     });
   }
+
+  // Pass validator analysis rows to Spreadsheet for summary columns
+  const analysisRows = report?.analysisRows ?? null;
 
   return (
     <>
@@ -101,6 +111,7 @@ export function Step2Validation() {
               dates={dates}
               highlights={highlights}
               rowFindings={rowFindingsMap}
+              analysisRows={analysisRows}
               showSummaryColumns
               showStatusColumn={isTikita}
               showDiscountColumn={isTikita}
@@ -137,6 +148,10 @@ export function Step2Validation() {
             {report && (
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                  <span className="text-gray-700">총 출결 수</span>
+                  <span className="font-semibold text-gray-900">{report.sueopSummary.totalBillableAttendanceCount}회</span>
+                </div>
+                <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                   <span className="text-gray-700">총 기대 납입금</span>
                   <span className="font-semibold text-gray-900">{report.sueopSummary.expectedTotalAmount.toLocaleString()}원</span>
                 </div>
@@ -154,6 +169,14 @@ export function Step2Validation() {
                   <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
                     <span className="text-gray-700">총 할인금</span>
                     <span className="font-semibold text-gray-900">{report.sueopSummary.inScope.harinTotal.toLocaleString()}원</span>
+                  </div>
+                )}
+                {report.sueopSummary.totalChayi !== 0 && (
+                  <div className="flex items-center justify-between py-2 text-[13px] border-b border-gray-100 last:border-b-0">
+                    <span className="text-gray-700">총 차이</span>
+                    <span className={report.sueopSummary.totalChayi > 0 ? 'font-semibold text-red-600' : 'font-semibold text-blue-600'}>
+                      {report.sueopSummary.totalChayi > 0 ? '+' : ''}{report.sueopSummary.totalChayi.toLocaleString()}원
+                    </span>
                   </div>
                 )}
               </div>
@@ -190,10 +213,6 @@ export function Step2Validation() {
               <div className="flex justify-between py-1.5 text-sm text-gray-700">
                 <span>1회당 수강료</span>
                 <span className="font-semibold text-gray-900">{activeCourse.rule.unitPrice.toLocaleString()}원</span>
-              </div>
-              <div className="flex justify-between py-1.5 text-sm text-gray-700">
-                <span>기대 납입금</span>
-                <span className="font-semibold text-gray-900">{(conductedCount * activeCourse.rule.unitPrice).toLocaleString()}원</span>
               </div>
               <div className="flex justify-between py-1.5 text-sm text-gray-700">
                 <span>교재비</span>

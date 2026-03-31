@@ -1,4 +1,4 @@
-import type { SueopAggregateInput, HVectorCategory, KonCategory } from '@/aca/domain/sueop/validator';
+import type { HVectorCategory, KonCategory } from '@/aca/domain/sueop/validator';
 import type { AttendanceStatus } from '@/features/validator/types';
 
 export interface BuildInputParams {
@@ -30,7 +30,12 @@ function mapAttendance(status: AttendanceStatus): HVectorCategory | null {
   }
 }
 
-export function buildSueopAggregateInput(params: BuildInputParams): SueopAggregateInput {
+/**
+ * Builds a raw input object for the validator.
+ * The validator's `run(rawInput)` will Zod-parse this via `checkInput()`,
+ * applying defaults for COMPAT-optional fields.
+ */
+export function buildSueopAggregateInput(params: BuildInputParams): unknown {
   const {
     queryPeriodStart,
     queryPeriodEnd,

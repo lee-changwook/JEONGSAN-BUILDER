@@ -70,11 +70,11 @@ export function FindingCard({ finding, status, mode, onAction }: FindingCardProp
 
       <div className="text-[13px] text-gray-500 leading-normal mb-2.5">{finding.reason}</div>
 
-      {Object.keys(finding.evidence).length > 0 && (
+      {finding.evidence && Object.keys(finding.evidence).length > 0 && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2.5 mb-3.5 text-[13px] text-gray-600 leading-relaxed">
           {Object.entries(finding.evidence).map(([key, value]) => (
             <div key={key}>
-              {key}: {value}
+              {key}: {String(value)}
             </div>
           ))}
         </div>
