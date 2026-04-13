@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Etc.
 apidocs*
+
+# Git worktrees
+.worktrees/
