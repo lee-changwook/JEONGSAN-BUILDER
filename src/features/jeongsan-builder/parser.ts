@@ -73,15 +73,39 @@ function traced<T>(
   };
 }
 
+/**
+ * 엑셀 헤더의 분반 표기 규약:
+ *   - `|`로 분리된 파트 중 `분반: {분반명}` 형식이 반드시 들어간다.
+ *   - `분반: A반`, `분반 : 심화반`, `분반:수학A` 등 콜론/공백 변형을 허용.
+ * 이 함수는 해당 파트에서 분반명만 추출한다. 매칭 실패 시 null.
+ */
+const BOONBAN_PART_PATTERN = /^분반\s*:\s*(.+)$/;
+
+function extractBoonbanName(part: string): string | null {
+  const match = part.match(BOONBAN_PART_PATTERN);
+  return match ? match[1].trim() || null : null;
+}
+
 function parseTitle(titleText: string) {
   const parts = titleText
     .split("|")
     .map((part) => part.trim())
     .filter(Boolean);
   const sueopName = parts[0]?.replace(/\s+보충$/g, "").trim() || titleText;
-  const boonbanName =
-    parts.find((part) => part.includes("분반")) ??
-    (titleText.includes("보충") ? "보충" : null);
+
+  // 분반: "분반: {분반명}" 파트를 우선 탐지. 없으면 bochungbi 시트 fallback("보충").
+  let boonbanName: string | null = null;
+  for (const part of parts) {
+    const extracted = extractBoonbanName(part);
+    if (extracted) {
+      boonbanName = extracted;
+      break;
+    }
+  }
+  if (!boonbanName && titleText.includes("보충")) {
+    boonbanName = "보충";
+  }
+
   const scheduleText = titleText.match(/\((\d{1,2}\/[^)]*)\)/)?.[1] ?? null;
   const statusText = titleText.match(/\((종강|진행중|폐강)\)/)?.[1] ?? null;
   const unitPriceText = titleText.match(/회당\s*[\d,]+원/)?.[0] ?? null;

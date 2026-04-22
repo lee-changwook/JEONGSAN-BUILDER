@@ -54,6 +54,54 @@ const OPS_NEEDING_AUX: ReadonlySet<RuleItem["op"]> = new Set([
 ]);
 
 /**
+ * 수업 기반(revenue) rule에 연결된 수업들의 분반을 강조된 뱃지로 렌더.
+ * 중복된 분반은 한 번만 표시하고, 분반이 없는 경우 "(분반 없음)"으로 표기한다.
+ */
+function SectionBadges({
+  teacherId,
+  classIds,
+  calculator,
+}: {
+  teacherId: string;
+  classIds: string[];
+  calculator: SettlementCalculator;
+}) {
+  const classes = calculator.getClasses(teacherId);
+  const selected = classIds
+    .map((cid) => classes.find((c) => c.id === cid))
+    .filter((c): c is NonNullable<typeof c> => Boolean(c));
+  if (selected.length === 0) return null;
+
+  const sections = Array.from(
+    new Set(selected.map((c) => c.section || "(분반 없음)")),
+  );
+
+  return (
+    <span className="ml-1.5 inline-flex flex-wrap items-center gap-1 align-middle">
+      {sections.map((s) => {
+        const isMissing = s === "(분반 없음)";
+        return (
+          <span
+            key={s}
+            className="inline-flex items-center rounded-[3px] px-1.5 py-[1px] text-[10.5px] font-semibold leading-[1.3]"
+            style={{
+              background: isMissing
+                ? "var(--aca-gray-50)"
+                : "var(--aca-blue-100)",
+              color: isMissing
+                ? "var(--aca-gray-500)"
+                : "var(--aca-blue-primary)",
+            }}
+          >
+            {s}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
  * 수업 기반(revenue) rule 행에 표시되는 4가지 참고값.
  * 모든 값은 rule에 선택된 수업에 한정된다 (강사 단위 합이 아님).
  *   - 이번달 미납액            : 선택된 수업들의 당월 minapTotal 합
@@ -83,11 +131,16 @@ function RevenueMetrics({
   // 2-column grid. 왼쪽→오른쪽, 위→아래 읽기 순서:
   //   [전월 미납액]        [전월 회수 (수수료)]
   //   [이번달 미납액]      [이번달 납부액(수수료 적용)]
-  const items: Array<{ label: string; value: number }> = [
-    { label: "전월 미납액", value: prevUnpaid },
-    { label: "전월 회수 (수수료)", value: prevRecoveredPay },
-    { label: "이번달 미납액", value: thisMonthUnpaid },
-    { label: "이번달 납부액(수수료 적용)", value: thisMonthPaid },
+  //
+  // 색상 규칙:
+  //   - 미납 관련 값 → red (--aca-red-primary)
+  //   - 납입/회수 관련 값 → blue (--aca-blue-primary)
+  type Tone = "unpaid" | "paid";
+  const items: Array<{ label: string; value: number; tone: Tone }> = [
+    { label: "전월 미납액", value: prevUnpaid, tone: "unpaid" },
+    { label: "전월 회수 (수수료)", value: prevRecoveredPay, tone: "paid" },
+    { label: "이번달 미납액", value: thisMonthUnpaid, tone: "unpaid" },
+    { label: "이번달 납부액(수수료 적용)", value: thisMonthPaid, tone: "paid" },
   ];
 
   return (
@@ -103,7 +156,14 @@ function RevenueMetrics({
           <span className="truncate">{it.label}</span>
           <span
             className="jb2-tnum shrink-0"
-            style={{ color: "var(--aca-gray-700)" }}
+            style={{
+              color:
+                it.value === 0
+                  ? "var(--aca-black)"
+                  : it.tone === "unpaid"
+                    ? "var(--aca-red-primary)"
+                    : "var(--aca-blue-primary)",
+            }}
           >
             {formatKRW(it.value)}
           </span>
@@ -245,7 +305,14 @@ function ItemRow({
           className="text-[13.5px] font-semibold leading-[1.45]"
           style={{ color: "var(--aca-black)" }}
         >
-          {rule.name}
+          <span className="align-middle">{rule.name}</span>
+          {rule.cat === "revenue" && rule.base !== "direct" && (
+            <SectionBadges
+              teacherId={teacherId}
+              classIds={rule.classIds}
+              calculator={calculator}
+            />
+          )}
         </div>
         {rule.description && (
           <div
