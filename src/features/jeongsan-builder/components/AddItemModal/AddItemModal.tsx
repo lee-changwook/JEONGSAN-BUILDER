@@ -25,10 +25,20 @@ import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderSto
 const REVENUE_BASE_OPTIONS: Array<{ id: BaseId; label: string; hint: string }> = [
   { id: "revenueVAT", label: "매출 (수수료 포함)", hint: "학생이 낸 총액 (납부액)" },
   { id: "revenueNet", label: "순매출 (수수료 제외)", hint: "카드 수수료 차감 후 실입금 (PAY)" },
-  { id: "revenueWithUnpaid", label: "매출 + 미납회수", hint: "순매출 + 미납금" },
+  {
+    id: "revenueWithUnpaidVAT",
+    label: "매출 + 미납회수 (수수료 미적용)",
+    hint: "납부액 + 전월 미납 회수금(원금)",
+  },
+  {
+    id: "revenueWithUnpaidNet",
+    label: "매출 + 미납회수 (수수료 적용)",
+    hint: "PAY + 전월 미납 회수 PAY",
+  },
   { id: "hours", label: "시수", hint: "수업 시간" },
   { id: "students", label: "학생 수", hint: "등록 학생 수" },
   { id: "unpaidShare", label: "미납금", hint: "미납액 합" },
+  { id: "direct", label: "직접 입력", hint: "금액을 직접 입력" },
 ];
 
 const OP_OPTIONS: Array<{
@@ -320,13 +330,16 @@ function BaseValuePicker({
 }) {
   const classIds = Array.from(state.classIds);
   const agg = calculator.getClassAggregate(teacherId, classIds);
+  const directBaseVal = Number(state.customBase) || 0;
   const valueByBase: Record<BaseId, number> = {
     revenueVAT: agg.revenueVAT,
     revenueNet: agg.revenueNet,
-    revenueWithUnpaid: agg.revenueWithUnpaid,
+    revenueWithUnpaidVAT: agg.revenueWithUnpaidVAT,
+    revenueWithUnpaidNet: agg.revenueWithUnpaidNet,
     hours: agg.hours,
     students: agg.students,
     unpaidShare: agg.unpaid,
+    direct: directBaseVal,
   };
 
   return (
@@ -377,11 +390,13 @@ function BaseValuePicker({
                       : "var(--aca-gray-700)",
                 }}
               >
-                {classIds.length === 0
-                  ? isCount
-                    ? "0"
-                    : formatKRW(0)
-                  : formatBaseDisplay(opt.id, baseVal)}
+                {opt.id === "direct"
+                  ? formatKRW(baseVal)
+                  : classIds.length === 0
+                    ? isCount
+                      ? "0"
+                      : formatKRW(0)
+                    : formatBaseDisplay(opt.id, baseVal)}
               </div>
             </button>
           );
@@ -548,6 +563,9 @@ function computeBaseVal(
   calculator: SettlementCalculator,
 ): number {
   if (cat === "revenue") {
+    if (state.base === "direct") {
+      return Number(state.customBase) || 0;
+    }
     const classIds = Array.from(state.classIds);
     const agg = calculator.getClassAggregate(teacherId, classIds);
     switch (state.base) {
@@ -555,8 +573,10 @@ function computeBaseVal(
         return agg.revenueVAT;
       case "revenueNet":
         return agg.revenueNet;
-      case "revenueWithUnpaid":
-        return agg.revenueWithUnpaid;
+      case "revenueWithUnpaidVAT":
+        return agg.revenueWithUnpaidVAT;
+      case "revenueWithUnpaidNet":
+        return agg.revenueWithUnpaidNet;
       case "hours":
         return agg.hours;
       case "students":
@@ -742,17 +762,22 @@ function AddItemModalInner({ entryMode }: InnerProps) {
     const name =
       form.name.trim() || defaultItemName(resolvedCategory, form, teacherClasses);
 
+    const isDirect = resolvedCategory === "revenue" && form.base === "direct";
+
     const rule: RuleItem = {
       id: generateRuleId(),
       rule: nextRuleLabel(existingRules, resolvedCategory),
       cat: resolvedCategory,
       name,
-      classIds: resolvedCategory === "revenue" ? Array.from(form.classIds) : [],
+      classIds:
+        resolvedCategory === "revenue" && !isDirect
+          ? Array.from(form.classIds)
+          : [],
       base: form.base,
       op: form.op,
       value: Number.isFinite(parsedValue) ? parsedValue : 0,
       customBase:
-        resolvedCategory === "revenue"
+        resolvedCategory === "revenue" && !isDirect
           ? 0
           : Number.isFinite(parsedCustomBase)
             ? parsedCustomBase
@@ -766,8 +791,16 @@ function AddItemModalInner({ entryMode }: InnerProps) {
 
   const canSubmit = (() => {
     if (!resolvedCategory) return false;
-    if (resolvedCategory === "revenue" && form.classIds.size === 0) return false;
-    if (resolvedCategory !== "revenue") {
+    const isRevenueDirect =
+      resolvedCategory === "revenue" && form.base === "direct";
+    if (
+      resolvedCategory === "revenue" &&
+      !isRevenueDirect &&
+      form.classIds.size === 0
+    ) {
+      return false;
+    }
+    if (resolvedCategory !== "revenue" || isRevenueDirect) {
       const parsed = Number(form.customBase);
       if (!Number.isFinite(parsed) || parsed <= 0) return false;
     }
@@ -815,13 +848,18 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
           {resolvedCategory === "revenue" ? (
             <>
-              <CourseSelector
-                teacherId={activeTeacherId}
-                calculator={calculator}
-                state={form}
-                onChange={patchForm}
-              />
-              <BaseValuePicker
+             
+              {form.base === "direct" ? (
+                <CustomBaseInput state={form} onChange={patchForm} />
+              ) : (
+                <CourseSelector
+                  teacherId={activeTeacherId}
+                  calculator={calculator}
+                  state={form}
+                  onChange={patchForm}
+                />
+              )}
+               <BaseValuePicker
                 state={form}
                 onChange={patchForm}
                 teacherId={activeTeacherId}

@@ -30,10 +30,12 @@ import {
 const BASE_OPTIONS: ReadonlyArray<{ value: BaseId; label: string }> = [
   { value: "revenueVAT", label: "매출 (수수료 포함)" },
   { value: "revenueNet", label: "순매출 (수수료 제외)" },
-  { value: "revenueWithUnpaid", label: "매출 + 미납회수" },
+  { value: "revenueWithUnpaidVAT", label: "매출 + 미납회수 (수수료 미적용)" },
+  { value: "revenueWithUnpaidNet", label: "매출 + 미납회수 (수수료 적용)" },
   { value: "hours", label: "시수" },
   { value: "students", label: "학생 수" },
   { value: "unpaidShare", label: "미납금" },
+  { value: "direct", label: "직접 입력" },
 ];
 
 const OP_OPTIONS: ReadonlyArray<{ value: RuleItem["op"]; label: string }> = [
@@ -51,20 +53,84 @@ const OPS_NEEDING_AUX: ReadonlySet<RuleItem["op"]> = new Set([
   "add",
 ]);
 
+/**
+ * 수업 기반(revenue) rule 행에 표시되는 4가지 참고값.
+ * 모든 값은 rule에 선택된 수업에 한정된다 (강사 단위 합이 아님).
+ *   - 이번달 미납액            : 선택된 수업들의 당월 minapTotal 합
+ *   - 전월 미납액              : 선택된 수업에 연결된 minap_hoesu의 hoesuTotal + minapTotal
+ *                              (회수금 + 미회수금 합, 모두 수수료 미적용 원금)
+ *   - 전월 미납액 회수 금액     : 선택된 수업에 연결된 minap_hoesu의 payTotal
+ *                              (회수분 중 수수료 적용 후 실입금)
+ *   - 이번달 납부액            : 선택된 수업들의 당월 payTotal 합 (수수료 적용 후 실입금)
+ *
+ * direct 베이스 rule은 수업 선택이 없으므로 모든 값이 0으로 표시된다.
+ */
+function RevenueMetrics({
+  teacherId,
+  rule,
+  calculator,
+}: {
+  teacherId: string;
+  rule: RuleItem;
+  calculator: SettlementCalculator;
+}) {
+  const agg = calculator.getClassAggregate(teacherId, rule.classIds);
+  const thisMonthUnpaid = agg.unpaid;
+  const thisMonthPaid = agg.classes.reduce((s, c) => s + c.pay, 0);
+  const prevUnpaid = agg.hoesu.hoesuTotal + agg.hoesu.minapTotal;
+  const prevRecoveredPay = agg.hoesu.payTotal;
+
+  // 2-column grid. 왼쪽→오른쪽, 위→아래 읽기 순서:
+  //   [전월 미납액]        [전월 회수 (수수료)]
+  //   [이번달 미납액]      [이번달 납부액(수수료 적용)]
+  const items: Array<{ label: string; value: number }> = [
+    { label: "전월 미납액", value: prevUnpaid },
+    { label: "전월 회수 (수수료)", value: prevRecoveredPay },
+    { label: "이번달 미납액", value: thisMonthUnpaid },
+    { label: "이번달 납부액(수수료 적용)", value: thisMonthPaid },
+  ];
+
+  return (
+    <div
+      className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] leading-[1.4]"
+      style={{ color: "var(--aca-gray-500)" }}
+    >
+      {items.map((it) => (
+        <div
+          key={it.label}
+          className="flex items-baseline justify-between gap-2"
+        >
+          <span className="truncate">{it.label}</span>
+          <span
+            className="jb2-tnum shrink-0"
+            style={{ color: "var(--aca-gray-700)" }}
+          >
+            {formatKRW(it.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function baseValueOf(base: BaseId, agg: ClassAggregate): number {
   switch (base) {
     case "revenueVAT":
       return agg.revenueVAT;
     case "revenueNet":
       return agg.revenueNet;
-    case "revenueWithUnpaid":
-      return agg.revenueWithUnpaid;
+    case "revenueWithUnpaidVAT":
+      return agg.revenueWithUnpaidVAT;
+    case "revenueWithUnpaidNet":
+      return agg.revenueWithUnpaidNet;
     case "hours":
       return agg.hours;
     case "students":
       return agg.students;
     case "unpaidShare":
       return agg.unpaid;
+    case "direct":
+      return 0;
   }
 }
 
@@ -105,24 +171,45 @@ function ItemRow({
 
   let baseCell: React.ReactNode;
   if (rule.cat === "revenue") {
-    const agg = calculator.getClassAggregate(teacherId, rule.classIds);
-    const baseVal = baseValueOf(rule.base, agg);
-    const isCount = COUNT_BASES.has(rule.base);
-    baseCell = (
-      <>
-        <MiniDropdown<BaseId>
-          value={rule.base}
-          options={BASE_OPTIONS}
-          onChange={onBaseChange}
-        />
-        <div
-          className="jb2-tnum mt-1 text-[11px]"
-          style={{ color: "var(--aca-gray-400)" }}
-        >
-          = {isCount ? baseVal.toLocaleString() : formatKRW(baseVal)}
-        </div>
-      </>
-    );
+    if (rule.base === "direct") {
+      baseCell = (
+        <>
+          <MiniDropdown<BaseId>
+            value={rule.base}
+            options={BASE_OPTIONS}
+            onChange={onBaseChange}
+          />
+          <div className="mt-1">
+            <MiniInput
+              value={String(rule.customBase ?? 0)}
+              onChange={onCustomBaseChange}
+              cellId={rule.id}
+              cellCol="customBase"
+              cellSelected={customBaseCellSelected}
+            />
+          </div>
+        </>
+      );
+    } else {
+      const agg = calculator.getClassAggregate(teacherId, rule.classIds);
+      const baseVal = baseValueOf(rule.base, agg);
+      const isCount = COUNT_BASES.has(rule.base);
+      baseCell = (
+        <>
+          <MiniDropdown<BaseId>
+            value={rule.base}
+            options={BASE_OPTIONS}
+            onChange={onBaseChange}
+          />
+          <div
+            className="jb2-tnum mt-1 text-[11px]"
+            style={{ color: "var(--aca-gray-400)" }}
+          >
+            = {isCount ? baseVal.toLocaleString() : formatKRW(baseVal)}
+          </div>
+        </>
+      );
+    }
   } else {
     baseCell = (
       <MiniInput
@@ -139,7 +226,6 @@ function ItemRow({
     <tr
       style={{
         background: selected ? "#FBFAF4" : "var(--aca-white)",
-        borderBottom: "1px solid var(--aca-gray-100)",
       }}
     >
       <td
@@ -169,14 +255,21 @@ function ItemRow({
             {rule.description}
           </div>
         )}
+        {rule.cat === "revenue" && (
+          <RevenueMetrics
+            teacherId={teacherId}
+            rule={rule}
+            calculator={calculator}
+          />
+        )}
       </td>
       <td
         className="w-[170px] px-1.5 py-3 align-top"
         onMouseDown={(e) => {
           // revenue 행은 dropdown(베이스값 선택) → wrapper에 mousedown 전파 시
-          // selection이 비워질 수 있어 stopPropagation. 단 customBase MiniInput 셀은
-          // wrapper의 셀 selection 로직이 처리하도록 그대로 둬야 한다.
-          if (rule.cat === "revenue") {
+          // selection이 비워질 수 있어 stopPropagation. 단 customBase MiniInput 셀이
+          // 있는 direct 모드에서는 wrapper의 셀 selection 로직이 처리하도록 통과시킨다.
+          if (rule.cat === "revenue" && rule.base !== "direct") {
             e.stopPropagation();
           }
         }}
@@ -294,12 +387,14 @@ export function SettlementItemTable() {
   );
   const orderedRuleIds = useMemo(() => rules.map((r) => r.id), [rules]);
 
-  // ruleId → 드래그 가능한 컬럼 집합. (revenue는 customBase 비활성, op이 needsAux 아니면 value 비활성)
+  // ruleId → 드래그 가능한 컬럼 집합.
+  //   - customBase는 plus/minus 또는 revenue+direct에서만 활성
+  //   - value는 op이 aux를 필요로 할 때만 활성
   const draggable = useMemo<DraggableMap>(() => {
     const map = new Map<string, Set<CellCol>>();
     for (const r of rules) {
       const cols = new Set<CellCol>();
-      if (r.cat !== "revenue") cols.add("customBase");
+      if (r.cat !== "revenue" || r.base === "direct") cols.add("customBase");
       if (OPS_NEEDING_AUX.has(r.op)) cols.add("value");
       map.set(r.id, cols);
     }
@@ -355,7 +450,7 @@ export function SettlementItemTable() {
       style={{ background: "var(--aca-white)" }}
       {...cellSel.wrapperProps}
     >
-      <table className="jb2-tnum w-full border-separate border-spacing-0">
+      <table className="jb2-tnum jb2-rule-table w-full border-separate border-spacing-0">
         <thead>
           <tr
             className="sticky top-0 z-[1]"

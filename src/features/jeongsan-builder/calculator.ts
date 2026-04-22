@@ -48,21 +48,52 @@ export interface ClassItem {
   statusText: string | null;
   students: number;
   hours: number;
+  /** 당월 매출(수수료 미적용) = nabipTotal */
   revenueVAT: number;
+  /** 당월 매출(수수료 적용) = payTotal */
   revenueNet: number;
+  /** 당월 미납액 = minapTotal */
   unpaid: number;
-  hoesu: number;
+  /** 당월 납부액(수수료 적용) = payTotal */
   pay: number;
+  /**
+   * 이 강좌에 매핑된 전월 미납회수 통계. minap_hoesu 시트의 각 row에 있는
+   * linkedSueopName("연결 수업")로 매칭해서 누적한다. 매칭되지 않은 row는
+   * 반영되지 않는다.
+   */
+  hoesu: HoesuStats;
 }
+
+/**
+ * 강사의 미납회수(minap_hoesu) 시트에서 집계된 통계.
+ *   - hoesuTotal: 전월 미납 중 이번 달에 회수된 금액(수수료 미적용, 원금)
+ *   - minapTotal: 전월 미납 중 아직 회수되지 않은 금액(수수료 미적용)
+ *   - payTotal:   hoesuTotal 중 수수료 적용(차감) 후 학원에 실입금된 금액
+ *
+ * "전월 미납액" = hoesuTotal + minapTotal (이전 달 미납 총액)
+ */
+export interface HoesuStats {
+  hoesuTotal: number;
+  minapTotal: number;
+  payTotal: number;
+}
+
+export const EMPTY_HOESU_STATS: HoesuStats = {
+  hoesuTotal: 0,
+  minapTotal: 0,
+  payTotal: 0,
+};
 
 export interface ClassAggregate {
   classes: ClassItem[];
   revenueVAT: number;
   revenueNet: number;
-  /** 강사 단위로 집계된 미납회수금. aggregateClasses는 알 수 없으므로 facade에서 주입. */
-  hoesuRevenue: number;
-  /** revenueVAT(당월 매출) + 해당 강사의 hoesuRevenue(이번 달 회수된 이전 미납분). */
-  revenueWithUnpaid: number;
+  /** 선택된 강좌들의 minap_hoesu 통계 합. 각 강좌에 linkedSueopName으로 매핑된 값만 포함. */
+  hoesu: HoesuStats;
+  /** revenueVAT(당월 매출, 수수료 미적용) + hoesu.hoesuTotal(전월 미납 회수분 원금). */
+  revenueWithUnpaidVAT: number;
+  /** revenueNet(당월 매출, 수수료 적용) + hoesu.payTotal(전월 미납 회수분 실입금). */
+  revenueWithUnpaidNet: number;
   hours: number;
   students: number;
   unpaid: number;
@@ -73,10 +104,12 @@ export type CategoryId = "revenue" | "plus" | "minus";
 export type BaseId =
   | "revenueVAT"
   | "revenueNet"
-  | "revenueWithUnpaid"
+  | "revenueWithUnpaidVAT"
+  | "revenueWithUnpaidNet"
   | "hours"
   | "students"
-  | "unpaidShare";
+  | "unpaidShare"
+  | "direct";
 
 export type OpId = "rate" | "fixed" | "multiply" | "add" | "custom";
 
@@ -165,9 +198,36 @@ function blockToClassItem(
     revenueVAT: block.totals.nabipTotal,
     revenueNet: block.totals.payTotal,
     unpaid: block.totals.minapTotal,
-    hoesu: block.totals.hoesuTotal,
     pay: block.totals.payTotal,
+    // minap_hoesu는 별도 패스에서 linkedSueopName으로 매핑한다. 초기값은 빈 통계.
+    hoesu: { hoesuTotal: 0, minapTotal: 0, payTotal: 0 },
   };
+}
+
+/** 강좌명 매칭 시 공백/특수문자를 제거한 정규화. */
+function normalizeCourseName(name: string): string {
+  return name.replace(/\s+/g, "").replace(/[·()|\-_]/g, "").toLowerCase();
+}
+
+/**
+ * minap_hoesu row의 linkedSueopName("연결 수업")으로 강사의 강좌 중 매칭되는 것을 찾는다.
+ *   1) 정규화 후 정확히 일치
+ *   2) 부분 문자열 (class.name ⊇ linkedName 또는 그 반대)
+ * 두 단계 중 먼저 매치되는 것을 반환. 못 찾으면 null.
+ */
+function findClassByLinkedName(
+  classes: ClassItem[],
+  linkedName: string,
+): ClassItem | null {
+  const q = normalizeCourseName(linkedName);
+  if (!q) return null;
+  const exact = classes.find((c) => normalizeCourseName(c.name) === q);
+  if (exact) return exact;
+  const contains = classes.find((c) => {
+    const n = normalizeCourseName(c.name);
+    return n.includes(q) || q.includes(n);
+  });
+  return contains ?? null;
 }
 
 /**
@@ -189,11 +249,11 @@ function buildTeachersAndClasses(
 ): {
   teachers: Teacher[];
   classesByTeacher: Map<string, ClassItem[]>;
-  hoesuByTeacher: Map<string, number>;
 } {
-  // blockId 단위로 묶되 teacherName.value가 빈 값이면 제외.
+  // Pass 1: 일반(수업/보충) 블록을 강사별로 묶는다.
   const blocksByTeacher = new Map<string, PayDocumentBlock[]>();
-  const hoesuByTeacher = new Map<string, number>();
+  // Pass 2에서 사용할 미납회수 블록을 강사별로 분리 수집.
+  const minapHoesuBlocksByTeacher = new Map<string, PayDocumentBlock[]>();
 
   for (const sheet of parseResult.sheets) {
     for (const block of sheet.blocks) {
@@ -201,12 +261,9 @@ function buildTeachersAndClasses(
       if (!teacherName) continue;
 
       if (block.kind === "minap_hoesu") {
-        // 미납회수 시트는 강좌 리스트가 아닌 강사 단위 회수 합으로 집계.
-        const teacherId = teacherIdOf(teacherName);
-        hoesuByTeacher.set(
-          teacherId,
-          (hoesuByTeacher.get(teacherId) ?? 0) + block.totals.hoesuTotal,
-        );
+        const list = minapHoesuBlocksByTeacher.get(teacherName);
+        if (list) list.push(block);
+        else minapHoesuBlocksByTeacher.set(teacherName, [block]);
         continue;
       }
 
@@ -236,25 +293,66 @@ function buildTeachersAndClasses(
     classesByTeacher.set(teacherId, classItems);
   }
 
-  return { teachers, classesByTeacher, hoesuByTeacher };
+  // Pass 2: 미납회수 시트의 각 student row를 linkedSueopName으로 강좌에 매핑해
+  //        해당 강좌의 hoesu 통계에 누적한다. 매칭 실패한 row는 console.warn으로
+  //        알리고 반영하지 않는다(강좌 불명확한 회수는 정산에 귀속시키지 않음).
+  for (const [teacherName, mhBlocks] of minapHoesuBlocksByTeacher) {
+    const teacherId = teacherIdOf(teacherName);
+    const classes = classesByTeacher.get(teacherId);
+    if (!classes || classes.length === 0) {
+      // 강좌가 하나도 없는 강사(미납회수만 있는 경우)는 매핑할 대상이 없으므로 스킵.
+      continue;
+    }
+
+    for (const block of mhBlocks) {
+      for (const row of block.rows) {
+        if (row.rowKind !== "minap_hoesu_student") continue;
+        const linkedName = row.linkedSueopName.value.trim();
+        const matched = findClassByLinkedName(classes, linkedName);
+        if (!matched) {
+          if (typeof console !== "undefined" && linkedName) {
+            console.warn(
+              `[정산빌더] 미납회수 row의 연결 수업 매칭 실패: teacher="${teacherName}", linked="${linkedName}"`,
+            );
+          }
+          continue;
+        }
+        matched.hoesu = {
+          hoesuTotal: matched.hoesu.hoesuTotal + row.hoesuAmount.value,
+          minapTotal: matched.hoesu.minapTotal + row.minapAmount.value,
+          payTotal: matched.hoesu.payTotal + row.payAmount.value,
+        };
+      }
+    }
+  }
+
+  return { teachers, classesByTeacher };
 }
 
 // ============================================================================
 // Aggregate
 // ============================================================================
 
-function aggregateClasses(
-  classes: ClassItem[],
-  hoesuRevenue: number,
-): ClassAggregate {
+function aggregateClasses(classes: ClassItem[]): ClassAggregate {
   const revenueVAT = classes.reduce((s, c) => s + c.revenueVAT, 0);
+  const revenueNet = classes.reduce((s, c) => s + c.revenueNet, 0);
+  const hoesu: HoesuStats = classes.reduce<HoesuStats>(
+    (s, c) => ({
+      hoesuTotal: s.hoesuTotal + c.hoesu.hoesuTotal,
+      minapTotal: s.minapTotal + c.hoesu.minapTotal,
+      payTotal: s.payTotal + c.hoesu.payTotal,
+    }),
+    { hoesuTotal: 0, minapTotal: 0, payTotal: 0 },
+  );
   return {
     classes,
     revenueVAT,
-    revenueNet: classes.reduce((s, c) => s + c.revenueNet, 0),
-    hoesuRevenue,
-    // 매출 + 미납회수 = 당월 매출(VAT 포함, 학원 입금 기준) + 이번 달 회수된 이전 미납분
-    revenueWithUnpaid: revenueVAT + hoesuRevenue,
+    revenueNet,
+    hoesu,
+    // 매출 + 미납회수 (수수료 미적용) = 당월 매출(원금) + 이번 달 회수된 이전 미납분(원금)
+    revenueWithUnpaidVAT: revenueVAT + hoesu.hoesuTotal,
+    // 매출 + 미납회수 (수수료 적용) = 당월 매출(실입금) + 이번 달 회수된 이전 미납분(실입금)
+    revenueWithUnpaidNet: revenueNet + hoesu.payTotal,
     hours: classes.reduce((s, c) => s + c.hours, 0),
     students: classes.reduce((s, c) => s + c.students, 0),
     unpaid: classes.reduce((s, c) => s + c.unpaid, 0),
@@ -267,14 +365,19 @@ function baseValueFromAgg(base: BaseId, agg: ClassAggregate): number {
       return agg.revenueVAT;
     case "revenueNet":
       return agg.revenueNet;
-    case "revenueWithUnpaid":
-      return agg.revenueWithUnpaid;
+    case "revenueWithUnpaidVAT":
+      return agg.revenueWithUnpaidVAT;
+    case "revenueWithUnpaidNet":
+      return agg.revenueWithUnpaidNet;
     case "hours":
       return agg.hours;
     case "students":
       return agg.students;
     case "unpaidShare":
       return agg.unpaid;
+    case "direct":
+      // 직접 입력 베이스는 rule.customBase를 사용한다. computeRule에서 별도 처리.
+      return 0;
   }
 }
 
@@ -285,16 +388,19 @@ function baseValueFromAgg(base: BaseId, agg: ClassAggregate): number {
 function computeRule(
   rule: RuleItem,
   teacherClasses: ClassItem[],
-  hoesuRevenue: number,
 ): RuleResult {
   let baseVal = 0;
 
   if (rule.cat === "revenue") {
-    const selectedClasses = rule.classIds
-      .map((cid) => teacherClasses.find((c) => c.id === cid))
-      .filter((c): c is ClassItem => Boolean(c));
-    const agg = aggregateClasses(selectedClasses, hoesuRevenue);
-    baseVal = baseValueFromAgg(rule.base, agg);
+    if (rule.base === "direct") {
+      baseVal = rule.customBase;
+    } else {
+      const selectedClasses = rule.classIds
+        .map((cid) => teacherClasses.find((c) => c.id === cid))
+        .filter((c): c is ClassItem => Boolean(c));
+      const agg = aggregateClasses(selectedClasses);
+      baseVal = baseValueFromAgg(rule.base, agg);
+    }
   } else {
     baseVal = rule.customBase;
   }
@@ -377,7 +483,6 @@ function seedRulesForTeacher(classes: ClassItem[]): RuleItem[] {
 function computeTeacherSummary(
   rules: RuleItem[],
   teacherClasses: ClassItem[],
-  hoesuRevenue: number,
 ): TeacherSummary {
   let gross = 0;
   let deduct = 0;
@@ -387,7 +492,7 @@ function computeTeacherSummary(
   let minusCount = 0;
 
   for (const rule of rules) {
-    const { result } = computeRule(rule, teacherClasses, hoesuRevenue);
+    const { result } = computeRule(rule, teacherClasses);
     if (rule.cat === "revenue") {
       revenueCount += 1;
       gross += result;
@@ -426,7 +531,6 @@ function computeMonthlySummary(
   teachers: Teacher[],
   rulesByTeacher: Record<string, RuleItem[]>,
   classesByTeacher: Map<string, ClassItem[]>,
-  hoesuByTeacher: Map<string, number>,
 ): MonthlySummary {
   let totalGross = 0;
   let totalDeduct = 0;
@@ -435,8 +539,7 @@ function computeMonthlySummary(
   for (const teacher of teachers) {
     const rules = rulesByTeacher[teacher.id] ?? [];
     const classes = classesByTeacher.get(teacher.id) ?? [];
-    const hoesu = hoesuByTeacher.get(teacher.id) ?? 0;
-    const summary = computeTeacherSummary(rules, classes, hoesu);
+    const summary = computeTeacherSummary(rules, classes);
     totalGross += summary.gross;
     totalDeduct += summary.deduct;
     totalWithholding += summary.withholding;
@@ -541,8 +644,7 @@ export function createCalculator(
   parseResult: PayDocumentParseResult,
   options?: CreateCalculatorOptions,
 ): SettlementCalculator {
-  const { teachers, classesByTeacher, hoesuByTeacher } =
-    buildTeachersAndClasses(parseResult);
+  const { teachers, classesByTeacher } = buildTeachersAndClasses(parseResult);
 
   const rulesByTeacher: Record<string, RuleItem[]> =
     options?.initialRules ??
@@ -555,7 +657,6 @@ export function createCalculator(
     parseResult,
     teachers,
     classesByTeacher,
-    hoesuByTeacher,
     rulesByTeacher,
   });
 }
@@ -564,7 +665,6 @@ interface FacadeInternals {
   parseResult: PayDocumentParseResult;
   teachers: Teacher[];
   classesByTeacher: Map<string, ClassItem[]>;
-  hoesuByTeacher: Map<string, number>;
   rulesByTeacher: Record<string, RuleItem[]>;
 }
 
@@ -573,7 +673,6 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
     parseResult,
     teachers,
     classesByTeacher,
-    hoesuByTeacher,
     rulesByTeacher,
   } = state;
 
@@ -598,7 +697,6 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
         teachers,
         rulesByTeacher,
         classesByTeacher,
-        hoesuByTeacher,
       ),
 
     getTeachers: () => teachers,
@@ -617,7 +715,7 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
       const selected = classIds
         .map((cid) => teacherClasses.find((c) => c.id === cid))
         .filter((c): c is ClassItem => Boolean(c));
-      return aggregateClasses(selected, hoesuByTeacher.get(teacherId) ?? 0);
+      return aggregateClasses(selected);
     },
 
     getBlock: (blockId) => {
@@ -646,11 +744,7 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
       const rule = rules.find((r) => r.id === ruleId);
       if (!rule) return null;
       const teacherClasses = classesByTeacher.get(teacherId) ?? [];
-      return computeRule(
-        rule,
-        teacherClasses,
-        hoesuByTeacher.get(teacherId) ?? 0,
-      );
+      return computeRule(rule, teacherClasses);
     },
 
     getTeacherSummary: (teacherId) => {
@@ -660,7 +754,6 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
       return computeTeacherSummary(
         rules,
         teacherClasses,
-        hoesuByTeacher.get(teacherId) ?? 0,
       );
     },
 
@@ -682,7 +775,7 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
 
       const nextClassesByTeacher = new Map(classesByTeacher);
       nextClassesByTeacher.set(teacherId, []);
-      // 신규 강사는 회수금이 없으므로 hoesuByTeacher는 그대로 사용 (get → 0 fallback).
+      // 신규 강사는 회수금 매핑 대상이 없으므로 추가 상태 없음.
 
       const calculator = buildFacade({
         ...state,
@@ -700,15 +793,12 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
       }
       const nextClassesByTeacher = new Map(classesByTeacher);
       nextClassesByTeacher.delete(teacherId);
-      const nextHoesuByTeacher = new Map(hoesuByTeacher);
-      nextHoesuByTeacher.delete(teacherId);
       const { [teacherId]: _removed, ...nextRulesByTeacher } = rulesByTeacher;
       void _removed;
       return buildFacade({
         ...state,
         teachers: teachers.filter((t) => t.id !== teacherId),
         classesByTeacher: nextClassesByTeacher,
-        hoesuByTeacher: nextHoesuByTeacher,
         rulesByTeacher: nextRulesByTeacher,
       });
     },

@@ -85,3 +85,22 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* 규칙 테이블의 셀 구분선.
+ * border-separate + border-spacing-0 조합이라 <tr>에 border를 걸어도 렌더되지 않으므로
+ * <td>에 직접 걸어야 한다.
+ *   - 행 간 구분선: gray-100 (기존 tr.borderBottom을 대체)
+ *   - 열 간 세로 구분선: gray-50 (아주 옅게) — "항목명·상세 | 베이스값" (col 4),
+ *     "세금 | 수식" (col 8) 두 위치에만.
+ * 컬럼 순서: [checkbox(1), #(2), 유형(3), 항목명·상세(4), 베이스값(5),
+ *            OPERATION(6), 보조값(7), 세금(8), 수식(9), 금액(10)]
+ */
+.jb2-scope .jb2-rule-table tbody td {
+  border-bottom: 1px solid var(--aca-gray-100);
+}
+.jb2-scope .jb2-rule-table tbody td:nth-child(4),
+.jb2-scope .jb2-rule-table tbody td:nth-child(8),
+.jb2-scope .jb2-rule-table thead th:nth-child(4),
+.jb2-scope .jb2-rule-table thead th:nth-child(8) {
+  border-right: 1px solid var(--aca-gray-50);
+}
