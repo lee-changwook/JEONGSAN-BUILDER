@@ -56,15 +56,18 @@ const OPS_NEEDING_AUX: ReadonlySet<RuleItem["op"]> = new Set([
 /**
  * 수업 기반(revenue) rule에 연결된 수업들의 분반을 강조된 뱃지로 렌더.
  * 중복된 분반은 한 번만 표시하고, 분반이 없는 경우 "(분반 없음)"으로 표기한다.
+ * 같은 수업이 다른 rule에서도 쓰이고 있으면 rule 이름 옆에 "중복" 뱃지를 붙인다.
  */
 function SectionBadges({
   teacherId,
   classIds,
   calculator,
+  hasDuplicate,
 }: {
   teacherId: string;
   classIds: string[];
   calculator: SettlementCalculator;
+  hasDuplicate: boolean;
 }) {
   const classes = calculator.getClasses(teacherId);
   const selected = classIds
@@ -97,6 +100,18 @@ function SectionBadges({
           </span>
         );
       })}
+      {hasDuplicate && (
+        <span
+          className="inline-flex items-center rounded-[3px] px-1.5 py-[1px] text-[10.5px] font-semibold leading-[1.3]"
+          style={{
+            background: "var(--aca-yellow-10)",
+            color: "var(--aca-yellow-primary)",
+          }}
+          title="이 rule의 수업이 다른 rule에서도 사용되고 있습니다"
+        >
+          중복
+        </span>
+      )}
     </span>
   );
 }
@@ -201,6 +216,8 @@ interface RowProps {
   selected: boolean;
   valueCellSelected: boolean;
   customBaseCellSelected: boolean;
+  /** 다른 rule과 수업 중복이 있으면 true. */
+  hasDuplicateClass: boolean;
   onToggle: () => void;
   onAuxChange: (value: string) => void;
   onCustomBaseChange: (value: string) => void;
@@ -216,6 +233,7 @@ function ItemRow({
   selected,
   valueCellSelected,
   customBaseCellSelected,
+  hasDuplicateClass,
   onToggle,
   onAuxChange,
   onCustomBaseChange,
@@ -311,6 +329,7 @@ function ItemRow({
               teacherId={teacherId}
               classIds={rule.classIds}
               calculator={calculator}
+              hasDuplicate={hasDuplicateClass}
             />
           )}
         </div>
@@ -468,6 +487,20 @@ export function SettlementItemTable() {
     return { get: (id) => map.get(id) };
   }, [rules]);
 
+  // classId가 2개 이상의 revenue rule에서 쓰이면 중복.
+  const duplicateClassIds = useMemo<ReadonlySet<string>>(() => {
+    const count = new Map<string, number>();
+    for (const r of rules) {
+      if (r.cat !== "revenue") continue;
+      for (const cid of r.classIds) {
+        count.set(cid, (count.get(cid) ?? 0) + 1);
+      }
+    }
+    const dup = new Set<string>();
+    for (const [cid, n] of count) if (n > 1) dup.add(cid);
+    return dup;
+  }, [rules]);
+
   const cellSel = useCellSelection(orderedRuleIds, draggable);
 
   // 강사 변경 시 셀 선택 비움
@@ -566,6 +599,9 @@ export function SettlementItemTable() {
                 customBaseCellSelected={cellSel.isSelected(
                   rule.id,
                   "customBase",
+                )}
+                hasDuplicateClass={rule.classIds.some((cid) =>
+                  duplicateClassIds.has(cid),
                 )}
                 onToggle={() => toggleRuleSelection(activeTeacherId, rule.id)}
                 onAuxChange={(raw) => {

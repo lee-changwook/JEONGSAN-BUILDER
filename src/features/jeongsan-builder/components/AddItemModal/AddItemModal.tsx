@@ -203,6 +203,14 @@ function CourseSelector({
   onChange: (patch: Partial<FormState>) => void;
 }) {
   const classes = calculator.getClasses(teacherId);
+  const existingRules = calculator.getRules(teacherId);
+  // 이 수업이 이미 다른 revenue rule에 포함돼 있는지 체크 (중복 표시용).
+  const usedClassIds = new Set<string>();
+  for (const r of existingRules) {
+    if (r.cat === "revenue") {
+      for (const cid of r.classIds) usedClassIds.add(cid);
+    }
+  }
   const query = state.courseSearch.trim().toLowerCase();
   const filtered =
     query === ""
@@ -263,6 +271,7 @@ function CourseSelector({
         ) : (
           filtered.map((c) => {
             const checked = state.classIds.has(c.id);
+            const alreadyUsed = usedClassIds.has(c.id);
             return (
               <div
                 key={c.id}
@@ -283,16 +292,30 @@ function CourseSelector({
                 />
                 <div className="min-w-0 flex-1">
                   <div
-                    className="truncate text-[13px] font-medium"
+                    className="flex items-center gap-1.5 text-[13px] font-medium"
                     style={{ color: "var(--aca-black)" }}
                   >
-                    {c.name}
-                    {c.section && (
+                    <span className="truncate">
+                      {c.name}
+                      {c.section && (
+                        <span
+                          className="ml-1 text-[11px]"
+                          style={{ color: "var(--aca-gray-500)" }}
+                        >
+                          · {c.section}
+                        </span>
+                      )}
+                    </span>
+                    {alreadyUsed && (
                       <span
-                        className="ml-1 text-[11px]"
-                        style={{ color: "var(--aca-gray-500)" }}
+                        className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
+                        style={{
+                          background: "var(--aca-yellow-10)",
+                          color: "var(--aca-yellow-primary)",
+                        }}
+                        title="이 수업은 이미 다른 항목에 포함되어 있습니다"
                       >
-                        · {c.section}
+                        이미 추가됨
                       </span>
                     )}
                   </div>
@@ -754,38 +777,68 @@ function AddItemModalInner({ entryMode }: InnerProps) {
 
   function handleSubmit() {
     if (!calculator || !activeTeacherId || !resolvedCategory) return;
-    const teacherClasses = calculator.getClasses(activeTeacherId);
-    const existingRules = calculator.getRules(activeTeacherId);
+    const teacherId = activeTeacherId;
+    const teacherClasses = calculator.getClasses(teacherId);
+    const existingRules = calculator.getRules(teacherId);
 
     const parsedValue = Number(form.value);
     const parsedCustomBase = Number(form.customBase);
-    const name =
-      form.name.trim() || defaultItemName(resolvedCategory, form, teacherClasses);
+    const customName = form.name.trim();
 
     const isDirect = resolvedCategory === "revenue" && form.base === "direct";
+    const value = Number.isFinite(parsedValue) ? parsedValue : 0;
+    const customBase = Number.isFinite(parsedCustomBase) ? parsedCustomBase : 0;
+
+    // 수업 기반(revenue, 비 direct)에서 여러 수업이 선택된 경우 각 수업을 별개의 rule로 추가한다.
+    // 그 외(direct / plus / minus)는 단일 rule.
+    if (resolvedCategory === "revenue" && !isDirect) {
+      const selectedClassIds = Array.from(form.classIds);
+
+      // R 라벨을 연속 증가시키기 위해 기존 규칙 리스트를 누적 복제하며 계산.
+      const accumulated: RuleItem[] = [...existingRules];
+      const toAdd: RuleItem[] = [];
+      for (const classId of selectedClassIds) {
+        const classItem = teacherClasses.find((c) => c.id === classId);
+        const name =
+          customName ||
+          (classItem ? `${classItem.name} 수업료` : "수업 기반 항목");
+        const rule: RuleItem = {
+          id: generateRuleId(),
+          rule: nextRuleLabel(accumulated, "revenue"),
+          cat: "revenue",
+          name,
+          classIds: [classId],
+          base: form.base,
+          op: form.op,
+          value,
+          customBase: 0,
+          taxable: form.taxable,
+        };
+        toAdd.push(rule);
+        accumulated.push(rule);
+      }
+      for (const r of toAdd) addRule(teacherId, r);
+      closeModal();
+      return;
+    }
+
+    const name =
+      customName || defaultItemName(resolvedCategory, form, teacherClasses);
 
     const rule: RuleItem = {
       id: generateRuleId(),
       rule: nextRuleLabel(existingRules, resolvedCategory),
       cat: resolvedCategory,
       name,
-      classIds:
-        resolvedCategory === "revenue" && !isDirect
-          ? Array.from(form.classIds)
-          : [],
+      classIds: [],
       base: form.base,
       op: form.op,
-      value: Number.isFinite(parsedValue) ? parsedValue : 0,
-      customBase:
-        resolvedCategory === "revenue" && !isDirect
-          ? 0
-          : Number.isFinite(parsedCustomBase)
-            ? parsedCustomBase
-            : 0,
+      value,
+      customBase,
       taxable: form.taxable,
     };
 
-    addRule(activeTeacherId, rule);
+    addRule(teacherId, rule);
     closeModal();
   }
 
