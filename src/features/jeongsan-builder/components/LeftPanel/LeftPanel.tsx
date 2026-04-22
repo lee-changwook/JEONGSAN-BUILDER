@@ -1,15 +1,16 @@
 "use client";
 
-import { File as FileIcon, X } from "lucide-react";
+import { useRef } from "react";
+import { AlertTriangle, File as FileIcon, X } from "lucide-react";
 
 import { DropZone } from "@/features/jeongsan-builder/components/LeftPanel/DropZone";
-import { LabeledInput } from "@/features/jeongsan-builder/components/LeftPanel/LabeledInput";
 import { PanelSection } from "@/features/jeongsan-builder/components/LeftPanel/PanelSection";
 import { PeriodSelect } from "@/features/jeongsan-builder/components/LeftPanel/PeriodSelect";
 import {
   StepConnector,
   StepIndicator,
 } from "@/features/jeongsan-builder/components/LeftPanel/StepIndicator";
+import { parsePayDocument } from "@/features/jeongsan-builder/parser";
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 
 const YEAR_OPTIONS = [
@@ -24,23 +25,49 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export function LeftPanel() {
-  const uploaded = useBuilderStore((s) => s.uploaded);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const uploaded = useBuilderStore((s) => s.calculator !== null);
+  const pendingFile = useBuilderStore((s) => s.pendingFile);
   const payFile = useBuilderStore((s) => s.payFile);
   const prevPayoutFile = useBuilderStore((s) => s.prevPayoutFile);
+  const parseError = useBuilderStore((s) => s.parseError);
+  const isParsing = useBuilderStore((s) => s.isParsing);
   const year = useBuilderStore((s) => s.year);
   const month = useBuilderStore((s) => s.month);
-  const cardFeeRate = useBuilderStore((s) => s.cardFeeRate);
   const setYear = useBuilderStore((s) => s.setYear);
   const setMonth = useBuilderStore((s) => s.setMonth);
-  const setCardFeeRate = useBuilderStore((s) => s.setCardFeeRate);
-  const buildSettlement = useBuilderStore((s) => s.buildSettlement);
+  const setPendingFile = useBuilderStore((s) => s.setPendingFile);
+  const startParsing = useBuilderStore((s) => s.startParsing);
+  const ingestParseResult = useBuilderStore((s) => s.ingestParseResult);
+  const setParseError = useBuilderStore((s) => s.setParseError);
   const resetAll = useBuilderStore((s) => s.resetAll);
-  const attachMockPayFile = useBuilderStore((s) => s.attachMockPayFile);
-  const attachMockPrevPayoutFile = useBuilderStore((s) => s.attachMockPrevPayoutFile);
   const removePayFile = useBuilderStore((s) => s.removePayFile);
   const removePrevPayoutFile = useBuilderStore((s) => s.removePrevPayoutFile);
 
-  const canBuild = Boolean(payFile) && !uploaded;
+  async function runBuild() {
+    if (!pendingFile) return;
+    startParsing();
+    try {
+      const result = await parsePayDocument(pendingFile);
+      ingestParseResult(result);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "페이 문서를 처리하는 중 알 수 없는 오류가 발생했습니다.";
+      setParseError(message);
+    }
+  }
+
+  function triggerFilePick() {
+    if (isParsing) return;
+    fileInputRef.current?.click();
+  }
+
+  // 파일이 선택된 상태: pendingFile(미파싱) 또는 payFile(파싱 완료)
+  const selectedFileName = payFile?.name ?? pendingFile?.name ?? null;
+  const hasFile = selectedFileName !== null;
 
   return (
     <div
@@ -50,10 +77,19 @@ export function LeftPanel() {
         borderRight: "1px solid var(--aca-gray-100)",
       }}
     >
-      <div
-        className="px-6 pt-[22px] pb-4"
-        style={{ borderBottom: "1px solid var(--aca-gray-100)" }}
-      >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          if (file) setPendingFile(file);
+          event.target.value = "";
+        }}
+      />
+
+      <div className="px-6 pt-[22px] pb-4">
         <div
           className="text-xl font-bold tracking-[-0.2px]"
           style={{ color: "var(--aca-black)" }}
@@ -68,15 +104,14 @@ export function LeftPanel() {
       <div className="flex-1 overflow-auto px-6 py-5">
         <div className="mb-[22px] flex flex-col">
           <StepIndicator
-            step={1}
             label="페이 문서 업로드"
             active={!uploaded}
             done={uploaded}
           />
           <StepConnector done={uploaded} />
-          <StepIndicator step={2} label="전월 강사 지급액 파일 업로드" />
+          <StepIndicator label="전월 강사 지급액 파일 업로드" />
           <StepConnector />
-          <StepIndicator step={3} label="정산 데이터 생성" active={uploaded} />
+          <StepIndicator label="정산 데이터 생성" active={uploaded} />
         </div>
 
         <div className="flex flex-col gap-[18px]">
@@ -84,7 +119,7 @@ export function LeftPanel() {
             title="페이 문서 업로드"
             subtitle="이번 달 반별 페이 문서 파일을 업로드해주세요"
           >
-            <div className="mb-3 grid grid-cols-[1fr_1fr_1.2fr] gap-2">
+            <div className="mb-3 grid grid-cols-2 gap-2">
               <PeriodSelect
                 label="대상 연도"
                 value={year}
@@ -97,14 +132,9 @@ export function LeftPanel() {
                 options={MONTH_OPTIONS}
                 onChange={setMonth}
               />
-              <LabeledInput
-                label="카드 수수료율"
-                value={cardFeeRate}
-                onChange={setCardFeeRate}
-              />
             </div>
 
-            {payFile ? (
+            {hasFile ? (
               <div
                 className="flex items-center gap-2.5 rounded-md px-3 py-2.5"
                 style={{
@@ -126,11 +156,13 @@ export function LeftPanel() {
                     className="truncate text-[13px] font-semibold"
                     style={{ color: "var(--aca-black)" }}
                   >
-                    {payFile.name}
+                    {selectedFileName}
                   </div>
-                  <div className="text-[11px]" style={{ color: "var(--aca-gray-400)" }}>
-                    {payFile.periodLabel} · {payFile.teacherCount}명
-                  </div>
+                  {payFile && (
+                    <div className="text-[11px]" style={{ color: "var(--aca-gray-400)" }}>
+                      {payFile.periodLabel} · {payFile.teacherCount}명
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -144,23 +176,54 @@ export function LeftPanel() {
               </div>
             ) : (
               <>
-                <DropZone onClick={attachMockPayFile} />
-                <div
-                  className="mt-2.5 rounded-md px-3 py-2.5 text-xs"
-                  style={{
-                    border: "1px solid var(--aca-gray-100)",
-                    color: "var(--aca-gray-400)",
-                  }}
-                >
-                  아직 업로드된 페이 문서가 없습니다.
-                </div>
+                <DropZone onClick={triggerFilePick} />
+                {isParsing ? (
+                  <div
+                    className="mt-2.5 rounded-md px-3 py-2.5 text-xs"
+                    style={{
+                      border: "1px solid var(--aca-blue-200)",
+                      color: "var(--aca-blue-primary)",
+                      background: "var(--aca-blue-10)",
+                    }}
+                  >
+                    페이 문서를 분석하는 중...
+                  </div>
+                ) : parseError ? (
+                  <div
+                    className="mt-2.5 flex items-start gap-2 rounded-md px-3 py-2.5 text-xs"
+                    style={{
+                      border: "1px solid var(--aca-red-40)",
+                      color: "var(--aca-red-primary)",
+                      background: "var(--aca-red-10)",
+                    }}
+                  >
+                    <AlertTriangle className="mt-[1px] size-3.5 shrink-0" />
+                    <span className="leading-[1.55]">{parseError}</span>
+                  </div>
+                ) : (
+                  <div
+                    className="mt-2.5 rounded-md px-3 py-2.5 text-xs"
+                    style={{
+                      border: "1px solid var(--aca-gray-100)",
+                      color: "var(--aca-gray-400)",
+                    }}
+                  >
+                    아직 업로드된 페이 문서가 없습니다.
+                  </div>
+                )}
               </>
             )}
           </PanelSection>
 
           <PanelSection
             title="전월 강사 지급액 파일 업로드"
-            subtitle="전월 강사지급액이 있으면 넣어주세요. 비율을 자동으로 입력합니다."
+            subtitle={
+              <>
+                전월 강사지급액이 있으면 넣어주세요.
+                <br />
+                비율을 자동으로 입력합니다.
+              </>
+            }
             muted={!uploaded}
           >
             {prevPayoutFile ? (
@@ -208,26 +271,19 @@ export function LeftPanel() {
               <DropZone
                 accept=".xlsx 파일"
                 small
-                onClick={uploaded ? attachMockPrevPayoutFile : undefined}
+                onClick={uploaded ? () => undefined : undefined}
               />
             )}
           </PanelSection>
         </div>
       </div>
 
-      <div
-        className="flex gap-2 px-6 py-4"
-        style={{
-          borderTop: "1px solid var(--aca-gray-100)",
-          background: "var(--aca-white)",
-        }}
-      >
+      <div className="flex gap-2 px-6 py-4">
         <button
           type="button"
           onClick={resetAll}
-          className="shrink-0 cursor-pointer rounded-md px-3.5 text-[15px] font-semibold"
+          className="h-[38px] shrink-0 cursor-pointer rounded-md px-3.5 text-[14px] font-semibold"
           style={{
-            height: 44,
             background: "var(--aca-white)",
             color: "var(--aca-gray-500)",
             border: "1px solid var(--aca-gray-200)",
@@ -235,20 +291,34 @@ export function LeftPanel() {
         >
           초기화
         </button>
-        <button
-          type="button"
-          disabled={!canBuild}
-          onClick={buildSettlement}
-          className="flex-1 cursor-pointer rounded-md px-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-          style={{
-            height: 44,
-            background: "var(--aca-black)",
-            color: "var(--aca-white)",
-            border: "none",
-          }}
-        >
-          정산 데이터 만들기
-        </button>
+        {uploaded ? (
+          <button
+            type="button"
+            onClick={triggerFilePick}
+            className="h-[38px] flex-1 cursor-pointer rounded-md px-3.5 text-[14px] font-semibold"
+            style={{
+              background: "var(--aca-white)",
+              color: "var(--aca-gray-600)",
+              border: "1px solid var(--aca-gray-200)",
+            }}
+          >
+            다른 파일 선택
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!pendingFile || isParsing}
+            onClick={pendingFile ? () => void runBuild() : triggerFilePick}
+            className="h-[38px] flex-1 cursor-pointer rounded-md px-3.5 text-[14px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              background: "var(--aca-black)",
+              color: "var(--aca-white)",
+              border: "none",
+            }}
+          >
+            {isParsing ? "분석 중..." : pendingFile ? "정산 데이터 만들기" : "정산 데이터 만들기"}
+          </button>
+        )}
       </div>
     </div>
   );

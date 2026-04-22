@@ -1,38 +1,102 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
 
 import { InstructorRow } from "@/features/jeongsan-builder/components/RightPanel/InstructorRow";
 import { RightPanelFooter } from "@/features/jeongsan-builder/components/RightPanel/RightPanelFooter";
-import { RightPanelSearch } from "@/features/jeongsan-builder/components/RightPanel/RightPanelSearch";
-import { MOCK_INSTRUCTORS } from "@/features/jeongsan-builder/mocks";
+import {
+  RightPanelSearch,
+  type SortOrder,
+} from "@/features/jeongsan-builder/components/RightPanel/RightPanelSearch";
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
+import { formatKRW } from "@/features/jeongsan-builder/calculator";
 
 interface RightPanelProps {
   empty?: boolean;
 }
 
 export function RightPanel({ empty }: RightPanelProps) {
+  const calculator = useBuilderStore((s) => s.calculator);
   const search = useBuilderStore((s) => s.instructorSearch);
   const setSearch = useBuilderStore((s) => s.setInstructorSearch);
-  const activeInstructor = useBuilderStore((s) => s.activeInstructor);
-  const setActiveInstructor = useBuilderStore((s) => s.setActiveInstructor);
+  const activeTeacherId = useBuilderStore((s) => s.activeTeacherId);
+  const setActiveTeacherId = useBuilderStore((s) => s.setActiveTeacherId);
   const exportChecks = useBuilderStore((s) => s.exportChecks);
   const toggleExportCheck = useBuilderStore((s) => s.toggleExportCheck);
+  const addTeacher = useBuilderStore((s) => s.addTeacher);
 
-  const filtered = useMemo(() => {
-    if (empty) return [];
-    const query = search.trim().toLowerCase();
-    if (!query) return MOCK_INSTRUCTORS;
-    return MOCK_INSTRUCTORS.filter(
-      (it) =>
-        it.name.toLowerCase().includes(query) ||
-        it.subject.toLowerCase().includes(query),
-    );
-  }, [search, empty]);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("default");
+  const [addFormOpen, setAddFormOpen] = useState(false);
+  const [newTeacherName, setNewTeacherName] = useState("");
+  const [newTeacherSubject, setNewTeacherSubject] = useState("");
+
+  const allRows =
+    empty || !calculator
+      ? []
+      : calculator.getTeachers().map((teacher) => {
+          const summary = calculator.getTeacherSummary(teacher.id);
+          const net = summary?.net ?? 0;
+          return {
+            id: teacher.id,
+            name: teacher.name,
+            subject: teacher.subjectLabel,
+            amount: summary ? formatKRW(net) : "-",
+            net,
+          };
+        });
+
+  const query = search.trim().toLowerCase();
+  const searched =
+    query === ""
+      ? allRows
+      : allRows.filter(
+          (r) =>
+            r.name.toLowerCase().includes(query) ||
+            r.subject.toLowerCase().includes(query),
+        );
+
+  const filtered =
+    sortOrder === "net-desc"
+      ? [...searched].sort((a, b) => b.net - a.net)
+      : sortOrder === "net-asc"
+        ? [...searched].sort((a, b) => a.net - b.net)
+        : searched;
 
   const selectedExportCount = exportChecks.size;
+
+  const canSubmit = newTeacherName.trim().length > 0;
+
+  function resetForm() {
+    setNewTeacherName("");
+    setNewTeacherSubject("");
+  }
+
+  function handleToggleForm() {
+    if (addFormOpen) {
+      resetForm();
+      setAddFormOpen(false);
+    } else {
+      setAddFormOpen(true);
+    }
+  }
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    const createdId = addTeacher({
+      name: newTeacherName,
+      subjectLabel: newTeacherSubject,
+    });
+    if (createdId) {
+      resetForm();
+      setAddFormOpen(false);
+    }
+  }
+
+  function handleCancel() {
+    resetForm();
+    setAddFormOpen(false);
+  }
 
   return (
     <aside
@@ -67,22 +131,127 @@ export function RightPanel({ empty }: RightPanelProps) {
             {empty ? 0 : filtered.length}
           </div>
         </div>
-        <RightPanelSearch value={search} onChange={setSearch} disabled={empty} />
+        <RightPanelSearch
+          value={search}
+          onChange={setSearch}
+          sortOrder={sortOrder}
+          onSortChange={setSortOrder}
+          disabled={empty}
+        />
         <button
           type="button"
           disabled={empty}
+          onClick={handleToggleForm}
+          aria-expanded={addFormOpen}
           className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
           style={{
-            background: "var(--aca-blue-100)",
-            color: "var(--aca-blue-primary)",
-            border: "1px solid var(--aca-blue-200)",
+            background: addFormOpen
+              ? "var(--aca-blue-primary)"
+              : "var(--aca-blue-100)",
+            color: addFormOpen ? "var(--aca-white)" : "var(--aca-blue-primary)",
+            border: `1px solid ${addFormOpen ? "var(--aca-blue-primary)" : "var(--aca-blue-200)"}`,
             fontFamily: "inherit",
             cursor: empty ? "not-allowed" : "pointer",
           }}
         >
-          <Plus className="size-3.5" />
+          <Plus
+            className="size-3.5 transition-transform"
+            style={{ transform: addFormOpen ? "rotate(45deg)" : "none" }}
+          />
           정산 대상 추가
         </button>
+
+        {addFormOpen && !empty && (
+          <div
+            className="mt-2.5 flex flex-col gap-2 rounded-[6px] p-3"
+            style={{
+              background: "var(--aca-gray-10)",
+              border: "1px solid var(--aca-gray-100)",
+            }}
+          >
+            <div className="flex flex-col gap-1">
+              <label
+                className="text-[11px] font-semibold"
+                style={{ color: "var(--aca-gray-600)" }}
+                htmlFor="new-teacher-name"
+              >
+                정산 대상 이름 *
+              </label>
+              <input
+                id="new-teacher-name"
+                value={newTeacherName}
+                onChange={(e) => setNewTeacherName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canSubmit) handleSubmit();
+                  if (e.key === "Escape") handleCancel();
+                }}
+                placeholder="예: 김강사"
+                autoFocus
+                className="h-8 w-full rounded-[4px] border-none bg-[var(--aca-white)] px-2.5 text-[13px] outline-none"
+                style={{
+                  fontFamily: "inherit",
+                  color: "var(--aca-black)",
+                  border: "1px solid var(--aca-gray-200)",
+                  boxShadow: "inset 0 0 0 1px var(--aca-gray-200)",
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label
+                className="text-[11px] font-semibold"
+                style={{ color: "var(--aca-gray-600)" }}
+                htmlFor="new-teacher-subject"
+              >
+                과목 (선택)
+              </label>
+              <input
+                id="new-teacher-subject"
+                value={newTeacherSubject}
+                onChange={(e) => setNewTeacherSubject(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canSubmit) handleSubmit();
+                  if (e.key === "Escape") handleCancel();
+                }}
+                placeholder="예: 수학"
+                className="h-8 w-full rounded-[4px] border-none bg-[var(--aca-white)] px-2.5 text-[13px] outline-none"
+                style={{
+                  fontFamily: "inherit",
+                  color: "var(--aca-black)",
+                  boxShadow: "inset 0 0 0 1px var(--aca-gray-200)",
+                }}
+              />
+            </div>
+
+            <div className="mt-1 flex items-center justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="h-7 cursor-pointer rounded-[4px] px-3 text-[12px] font-semibold"
+                style={{
+                  background: "var(--aca-white)",
+                  color: "var(--aca-gray-600)",
+                  border: "1px solid var(--aca-gray-200)",
+                }}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={handleSubmit}
+                className="h-7 cursor-pointer rounded-[4px] px-3 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  background: "var(--aca-black)",
+                  color: "var(--aca-white)",
+                  border: "none",
+                }}
+              >
+                완료
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Body */}
@@ -121,14 +290,17 @@ export function RightPanel({ empty }: RightPanelProps) {
               <div>다른 키워드로 시도해 보세요</div>
             </div>
           ) : (
-            filtered.map((instructor) => (
+            filtered.map((row) => (
               <InstructorRow
-                key={instructor.name}
-                {...instructor}
-                active={instructor.name === activeInstructor}
-                exportChecked={exportChecks.has(instructor.name)}
-                onClick={() => setActiveInstructor(instructor.name)}
-                onToggleExport={() => toggleExportCheck(instructor.name)}
+                key={row.id}
+                name={row.name}
+                subject={row.subject}
+                amount={row.amount}
+                dot="green"
+                active={row.id === activeTeacherId}
+                exportChecked={exportChecks.has(row.id)}
+                onClick={() => setActiveTeacherId(row.id)}
+                onToggleExport={() => toggleExportCheck(row.id)}
               />
             ))
           )}

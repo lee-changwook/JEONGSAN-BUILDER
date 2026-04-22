@@ -12,6 +12,7 @@ export default function SchemaConverter({
   schemaSource: string;
 }) {
   const [parsed, setParsed] = useState<PayDocumentParseResult | null>(initialParsed);
+  const [fileName, setFileName] = useState<string | null>(initialParsed?.sourceFileName ?? null);
   const [error, setError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
 
@@ -22,6 +23,7 @@ export default function SchemaConverter({
       return;
     }
 
+    setFileName(file.name);
     setIsParsing(true);
     setError(null);
     try {
@@ -43,17 +45,20 @@ export default function SchemaConverter({
 
         <section className="mt-6 border border-neutral-300 p-4">
           <h2 className="text-base font-semibold">엑셀 넣으면 JSON 변환</h2>
-          <input
-            className="mt-3 block w-full border border-neutral-300 p-2 text-sm"
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
-          />
-          {initialParsed && (
-            <p className="mt-3 text-sm text-neutral-600">
-              기본 표시: {initialParsed.sourceFileName}
-            </p>
-          )}
+          <label className="mt-3 flex cursor-pointer items-center border border-neutral-300 text-sm">
+            <span className="shrink-0 border-r border-neutral-300 bg-neutral-100 px-3 py-2 text-neutral-700">
+              파일 선택
+            </span>
+            <span className="px-3 py-2 text-neutral-500">
+              {fileName ?? "선택된 파일 없음"}
+            </span>
+            <input
+              className="sr-only"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
           {isParsing && <p className="mt-3 text-sm text-neutral-600">변환 중...</p>}
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </section>

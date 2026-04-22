@@ -1,3 +1,10 @@
+"use client";
+
+import { useShallow } from "zustand/react/shallow";
+
+import { formatKRW } from "@/features/jeongsan-builder/calculator";
+import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
+
 interface SummaryMetricProps {
   label: string;
   value: string;
@@ -12,9 +19,8 @@ function SummaryMetric({ label, value, highlight, color }: SummaryMetricProps) {
         {label}
       </div>
       <div
-        className="jb2-tnum tracking-[-0.2px]"
+        className="jb2-tnum text-base tracking-[-0.2px]"
         style={{
-          fontSize: highlight ? 20 : 16,
           fontWeight: highlight ? 700 : 600,
           color: color ?? "var(--aca-black)",
         }}
@@ -26,6 +32,14 @@ function SummaryMetric({ label, value, highlight, color }: SummaryMetricProps) {
 }
 
 export function SummaryBar() {
+  const summary = useBuilderStore(
+    useShallow((s) => s.calculator?.getMonthlySummary() ?? null),
+  );
+
+  if (!summary) return null;
+
+  const monthLabel = `${summary.year}년 ${String(summary.month).padStart(2, "0")}월`;
+
   return (
     <div
       className="flex flex-wrap items-center gap-x-7 gap-y-3 px-6 py-3.5"
@@ -45,16 +59,29 @@ export function SummaryBar() {
           월간 정산
         </div>
         <div className="text-base font-bold" style={{ color: "var(--aca-black)" }}>
-          2026년 04월
+          {monthLabel}
         </div>
       </div>
 
-      <SummaryMetric label="강사" value="12명" />
-      <SummaryMetric label="정산액 (Gross)" value="₩ 512,450,320" highlight />
-      <SummaryMetric label="원천세 (3.3%)" value="₩ 16,900,860" color="var(--aca-gray-600)" />
+      <SummaryMetric label="전체 강사 수" value={`${summary.teacherCount}명`} />
+      <SummaryMetric
+        label="전체 매출"
+        value={formatKRW(summary.totalRevenue)}
+        color="var(--aca-gray-700)"
+      />
+      <SummaryMetric
+        label="정산액 (Gross)"
+        value={formatKRW(summary.totalSettle)}
+        highlight
+      />
+      <SummaryMetric
+        label="원천세 (3.3%)"
+        value={formatKRW(Math.abs(summary.totalWithholding))}
+        color="var(--aca-gray-600)"
+      />
       <SummaryMetric
         label="실지급액"
-        value="₩ 495,549,460"
+        value={formatKRW(summary.totalPayout)}
         highlight
         color="var(--aca-blue-primary)"
       />
@@ -68,7 +95,7 @@ export function SummaryBar() {
             미확정
           </div>
           <span
-            className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[13px] font-bold"
+            className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-base font-bold"
             style={{
               background: "var(--aca-yellow-10)",
               color: "var(--aca-yellow-primary)",
@@ -78,7 +105,7 @@ export function SummaryBar() {
               className="size-1.5 rounded-full"
               style={{ background: "var(--aca-yellow-primary)" }}
             />
-            3명
+            {summary.unconfirmedCount}명
           </span>
         </div>
       </div>

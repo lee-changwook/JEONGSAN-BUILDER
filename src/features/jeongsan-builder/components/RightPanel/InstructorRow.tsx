@@ -1,9 +1,14 @@
 "use client";
 
 import { MiniCheckbox } from "@/features/jeongsan-builder/components/MiniControls";
-import type { InstructorListItem } from "@/features/jeongsan-builder/types";
 
-interface InstructorRowProps extends Omit<InstructorListItem, "active"> {
+export type InstructorDot = "green" | "yellow";
+
+interface InstructorRowProps {
+  name: string;
+  subject: string;
+  amount: string;
+  dot: InstructorDot;
   active: boolean;
   exportChecked: boolean;
   onClick: () => void;

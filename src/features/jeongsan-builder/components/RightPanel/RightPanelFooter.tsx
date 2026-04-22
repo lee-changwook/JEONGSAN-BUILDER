@@ -8,21 +8,21 @@ function FooterButton({ variant, children, disabled }: FooterButtonProps) {
   const palette =
     variant === "black"
       ? {
-          background: "var(--aca-black)",
-          color: "var(--aca-white)",
-          border: "none",
-        }
+        background: "var(--aca-black)",
+        color: "var(--aca-white)",
+        border: "none",
+      }
       : {
-          background: "var(--aca-green-light)",
-          color: "var(--aca-green)",
-          border: "1px solid #B6E4CB",
-        };
+        background: "var(--aca-green-light)",
+        color: "var(--aca-green)",
+        border: "1px solid #B6E4CB",
+      };
 
   return (
     <button
       type="button"
       disabled={disabled}
-      className="w-full rounded-md px-3.5 text-[15px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+      className="w-full rounded-md px-3.5 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
       style={{ height: 44, ...palette }}
     >
       {children}

@@ -1,41 +1,41 @@
-import type { SettlementItemKind } from "@/features/jeongsan-builder/types";
+import type { CategoryId } from "@/features/jeongsan-builder/calculator";
 
-export function TypeBadge({ kind }: { kind: SettlementItemKind }) {
-  if (kind === "revenue") {
+export function TypeBadge({ cat }: { cat: CategoryId }) {
+  if (cat === "revenue") {
     return (
       <span
-        className="inline-flex h-[22px] min-w-8 items-center justify-center rounded px-1.5 text-[11px] font-bold tracking-[0.4px]"
+        className="inline-flex h-[22px] min-w-[42px] items-center justify-center rounded px-1.5 text-[11px] font-bold tracking-[0.4px]"
         style={{
           background: "var(--aca-revenue-bg)",
           color: "var(--aca-revenue-fg)",
         }}
       >
-        R
+        수업
       </span>
     );
   }
-  if (kind === "pay") {
+  if (cat === "plus") {
     return (
       <span
-        className="inline-flex size-[22px] items-center justify-center rounded text-sm font-bold"
+        className="inline-flex h-[22px] min-w-[42px] items-center justify-center rounded px-1.5 text-[11px] font-bold tracking-[0.4px]"
         style={{
           background: "var(--aca-blue-100)",
           color: "var(--aca-blue-primary)",
         }}
       >
-        +
+        +지급
       </span>
     );
   }
   return (
     <span
-      className="inline-flex size-[22px] items-center justify-center rounded text-sm font-bold"
+      className="inline-flex h-[22px] min-w-[42px] items-center justify-center rounded px-1.5 text-[11px] font-bold tracking-[0.4px]"
       style={{
         background: "var(--aca-red-10)",
         color: "var(--aca-red-primary)",
       }}
     >
-      −
+      −차감
     </span>
   );
 }

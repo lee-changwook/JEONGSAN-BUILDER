@@ -1,7 +1,8 @@
+import { AddItemModal } from "@/features/jeongsan-builder/components/AddItemModal/AddItemModal";
 import { InstructorCardHeader } from "@/features/jeongsan-builder/components/CenterPanel/InstructorCardHeader";
+import { SettlementItemActions } from "@/features/jeongsan-builder/components/CenterPanel/SettlementItemActions";
 import { SettlementItemTable } from "@/features/jeongsan-builder/components/CenterPanel/SettlementItemTable";
 import { SummaryBar } from "@/features/jeongsan-builder/components/CenterPanel/SummaryBar";
-import { MOCK_INSTRUCTOR_SUMMARY } from "@/features/jeongsan-builder/mocks";
 
 export function CenterPanelFilled() {
   return (
@@ -10,8 +11,10 @@ export function CenterPanelFilled() {
       style={{ background: "var(--aca-white)" }}
     >
       <SummaryBar />
-      <InstructorCardHeader summary={MOCK_INSTRUCTOR_SUMMARY} />
+      <InstructorCardHeader />
       <SettlementItemTable />
+      <SettlementItemActions />
+      <AddItemModal />
     </div>
   );
 }

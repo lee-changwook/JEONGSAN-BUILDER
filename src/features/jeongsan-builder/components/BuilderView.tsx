@@ -7,7 +7,7 @@ import { RightPanel } from "@/features/jeongsan-builder/components/RightPanel/Ri
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 
 export function BuilderView() {
-  const uploaded = useBuilderStore((s) => s.uploaded);
+  const ready = useBuilderStore((s) => s.calculator !== null);
 
   return (
     <div
@@ -15,8 +15,8 @@ export function BuilderView() {
       style={{ background: "var(--aca-gray-10)", color: "var(--aca-black)" }}
     >
       <LeftPanel />
-      {uploaded ? <CenterPanelFilled /> : <CenterEmpty />}
-      <RightPanel empty={!uploaded} />
+      {ready ? <CenterPanelFilled /> : <CenterEmpty />}
+      <RightPanel empty={!ready} />
     </div>
   );
 }

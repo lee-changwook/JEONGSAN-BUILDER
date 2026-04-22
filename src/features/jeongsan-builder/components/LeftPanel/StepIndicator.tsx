@@ -1,23 +1,34 @@
 interface StepIndicatorProps {
-  step: number;
   label: string;
   active?: boolean;
   done?: boolean;
 }
 
-export function StepIndicator({ step, label, active, done }: StepIndicatorProps) {
+export function StepIndicator({ label, active, done }: StepIndicatorProps) {
   const filled = active || done;
   return (
     <div className="flex items-center gap-2.5">
       <div
-        className="flex size-6 shrink-0 items-center justify-center rounded-full border-[1.5px] text-xs font-semibold"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full border-[1.5px]"
         style={{
           background: filled ? "var(--aca-blue-primary)" : "var(--aca-white)",
-          color: filled ? "var(--aca-white)" : "var(--aca-gray-400)",
           borderColor: filled ? "var(--aca-blue-primary)" : "var(--aca-gray-200)",
         }}
       >
-        {step}
+        {done && (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            <path
+              d="M1 3.5L3.8 6.5L9 1"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        {active && !done && (
+          <div className="size-2 rounded-full" style={{ background: "var(--aca-white)" }} />
+        )}
       </div>
       <span
         className="text-sm"

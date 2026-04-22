@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 interface PanelSectionProps {
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   muted?: boolean;
   children: ReactNode;
 }

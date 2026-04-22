@@ -1,7 +1,7 @@
-import { History, Save } from "lucide-react";
+"use client";
 
-import { formatKRW } from "@/features/jeongsan-builder/utils/format";
-import type { InstructorCardSummary } from "@/features/jeongsan-builder/types";
+import { formatKRW } from "@/features/jeongsan-builder/calculator";
+import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 
 interface MetricCellProps {
   label: string;
@@ -12,7 +12,14 @@ interface MetricCellProps {
   highlight?: boolean;
 }
 
-function MetricCell({ label, value, hint, positive, negative, highlight }: MetricCellProps) {
+function MetricCell({
+  label,
+  value,
+  hint,
+  positive,
+  negative,
+  highlight,
+}: MetricCellProps) {
   const color = highlight
     ? "var(--aca-blue-primary)"
     : positive
@@ -53,7 +60,23 @@ function MetricCell({ label, value, hint, positive, negative, highlight }: Metri
   );
 }
 
-export function InstructorCardHeader({ summary }: { summary: InstructorCardSummary }) {
+export function InstructorCardHeader() {
+  const calculator = useBuilderStore((s) => s.calculator);
+  const activeTeacherId = useBuilderStore((s) => s.activeTeacherId);
+
+  if (!calculator || !activeTeacherId) return null;
+  const teacher = calculator.getTeacher(activeTeacherId);
+  const summary = calculator.getTeacherSummary(activeTeacherId);
+  if (!teacher || !summary) return null;
+
+  const itemHint = [
+    summary.revenueCount > 0 ? `+수업 ${summary.revenueCount}` : null,
+    summary.plusCount > 0 ? `+수업외 ${summary.plusCount}` : null,
+    summary.minusCount > 0 ? `-차감 ${summary.minusCount}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div
       className="flex flex-col gap-3.5 px-5 py-4"
@@ -69,59 +92,12 @@ export function InstructorCardHeader({ summary }: { summary: InstructorCardSumma
               className="text-[22px] font-bold tracking-[-0.3px]"
               style={{ color: "var(--aca-black)" }}
             >
-              {summary.name}
-            </span>
-            <span
-              className="rounded px-1.5 py-0.5 text-[11px] font-semibold"
-              style={{
-                background: "var(--aca-yellow-10)",
-                color: "var(--aca-yellow-primary)",
-              }}
-            >
-              확인 {summary.reviewCount}
+              {teacher.name}
             </span>
           </div>
           <div className="text-[13px]" style={{ color: "var(--aca-gray-500)" }}>
-            {summary.subjects}
+            {teacher.subjectLabel}
           </div>
-        </div>
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            className="flex h-[27px] cursor-pointer items-center gap-1 rounded-md px-2.5 text-sm font-semibold"
-            style={{
-              background: "var(--aca-white)",
-              color: "var(--aca-gray-500)",
-              border: "1px solid var(--aca-gray-200)",
-            }}
-          >
-            <History className="size-3.5" />
-            히스토리
-          </button>
-          <button
-            type="button"
-            className="flex h-[27px] cursor-pointer items-center gap-1 rounded-md px-2.5 text-sm font-semibold"
-            style={{
-              background: "var(--aca-white)",
-              color: "var(--aca-gray-500)",
-              border: "1px solid var(--aca-gray-200)",
-            }}
-          >
-            <Save className="size-3.5" />
-            임시저장
-          </button>
-          <button
-            type="button"
-            className="flex h-[27px] cursor-pointer items-center gap-1 rounded-md px-2.5 text-sm font-semibold"
-            style={{
-              background: "var(--aca-black)",
-              color: "var(--aca-white)",
-              border: "none",
-            }}
-          >
-            <Save className="size-3.5" />
-            확정·발송
-          </button>
         </div>
       </div>
 
@@ -136,12 +112,15 @@ export function InstructorCardHeader({ summary }: { summary: InstructorCardSumma
         <MetricCell
           label="항목"
           value={`${summary.itemCount}개`}
-          hint="+수업 6 · +수업외 3 · -조교 2"
+          hint={itemHint || undefined}
         />
         <MetricCell label="지급 합계" value={formatKRW(summary.gross)} positive />
         <MetricCell label="차감 합계" value={formatKRW(summary.deduct)} negative />
         <MetricCell label="정산액" value={formatKRW(summary.settle)} />
-        <MetricCell label="원천세 (3.3%)" value={formatKRW(summary.wth)} />
+        <MetricCell
+          label="원천세 (3.3%)"
+          value={formatKRW(Math.abs(summary.withholding))}
+        />
         <MetricCell label="과세기준액" value={formatKRW(summary.taxable)} />
         <MetricCell label="실지급액" value={formatKRW(summary.net)} highlight />
       </div>

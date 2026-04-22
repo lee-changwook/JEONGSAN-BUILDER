@@ -1,5 +1,16 @@
 import { create } from "zustand";
 
+import type {
+  RuleItem,
+  SettlementCalculator,
+} from "@/features/jeongsan-builder/calculator";
+import { createCalculator } from "@/features/jeongsan-builder/calculator";
+import type { PayDocumentParseResult } from "@/features/jeongsan-builder/parser";
+
+const _now = new Date();
+const TODAY_YEAR = String(_now.getFullYear());
+const TODAY_MONTH = String(_now.getMonth() + 1);
+
 export interface UploadedFileInfo {
   name: string;
   periodLabel: string;
@@ -7,162 +18,302 @@ export interface UploadedFileInfo {
 }
 
 interface BuilderState {
-  // Upload / period
-  uploaded: boolean;
+  // Upload status / parseResult
+  parseResult: PayDocumentParseResult | null;
+  calculator: SettlementCalculator | null;
+
+  // File metadata (표시용)
+  pendingFile: File | null;
   payFile: UploadedFileInfo | null;
   prevPayoutFile: UploadedFileInfo | null;
+  parseError: string | null;
+  isParsing: boolean;
+
+  // Period / 설정
   year: string;
   month: string;
-  cardFeeRate: string;
 
-  // Center panel (item table)
-  selectedRows: Set<number>;
-  auxValues: Record<number, string>;
-  taxFlags: Record<number, boolean>;
+  // Center panel (강사별 규칙 선택 상태 — UI 전용)
+  selectedRuleIds: Record<string, Set<string>>;
 
-  // Right panel (instructor list)
-  activeInstructor: string | null;
+  // Right panel
+  activeTeacherId: string | null;
   instructorSearch: string;
   exportChecks: Set<string>;
 
-  // Actions — upload
+  // AddItem modal
+  // entryMode: 'unspecified' = 카테고리 선택 화면부터 / 나머지는 해당 플로우로 직접 진입
+  addItemModal: {
+    open: boolean;
+    entryMode: "unspecified" | "revenue" | "plus" | "minus" | null;
+  };
+
+  // --- Actions: upload ---
   setYear: (year: string) => void;
   setMonth: (month: string) => void;
-  setCardFeeRate: (rate: string) => void;
-  buildSettlement: () => void;
+  setPendingFile: (file: File | null) => void;
+  startParsing: () => void;
+  ingestParseResult: (parseResult: PayDocumentParseResult) => void;
+  setParseError: (message: string | null) => void;
   resetAll: () => void;
-  attachMockPayFile: () => void;
-  attachMockPrevPayoutFile: () => void;
   removePayFile: () => void;
   removePrevPayoutFile: () => void;
 
-  // Actions — center
-  toggleRow: (index: number) => void;
-  setAux: (index: number, value: string) => void;
-  applyAuxRange: (fromIndex: number, toIndex: number, value: string) => void;
-  setTax: (index: number, next: boolean) => void;
-  initAuxFromDefaults: (defaults: Record<number, string>) => void;
-  initTaxFromDefaults: (defaults: Record<number, boolean>) => void;
+  // --- Actions: teacher mutations (calculator로 위임) ---
+  addTeacher: (input: { name: string; subjectLabel?: string }) => string | null;
+  removeTeacher: (teacherId: string) => void;
 
-  // Actions — right
-  setActiveInstructor: (name: string) => void;
+  // --- Actions: rule mutations (calculator로 위임) ---
+  addRule: (teacherId: string, rule: RuleItem) => void;
+  updateRule: (
+    teacherId: string,
+    ruleId: string,
+    patch: Partial<RuleItem>,
+  ) => void;
+  removeRule: (teacherId: string, ruleId: string) => void;
+  bulkSetAux: (teacherId: string, ruleIds: string[], value: number) => void;
+  bulkSetCustomBase: (
+    teacherId: string,
+    ruleIds: string[],
+    customBase: number,
+  ) => void;
+  setRuleTaxable: (teacherId: string, ruleId: string, taxable: boolean) => void;
+
+  // --- Actions: UI (center) ---
+  toggleRuleSelection: (teacherId: string, ruleId: string) => void;
+
+  // --- Actions: UI (right) ---
+  setActiveTeacherId: (teacherId: string | null) => void;
   setInstructorSearch: (value: string) => void;
-  toggleExportCheck: (name: string) => void;
+  toggleExportCheck: (teacherId: string) => void;
+
+  // --- Actions: UI (add-item modal) ---
+  openAddItemModal: (
+    entryMode: "unspecified" | "revenue" | "plus" | "minus",
+  ) => void;
+  closeAddItemModal: () => void;
 }
 
-const INITIAL_PAY_FILE: UploadedFileInfo = {
-  name: "pay_2026_04.xlsx",
-  periodLabel: "2026-04-01 ~ 2026-04-30",
-  teacherCount: 12,
-};
+function fileInfoFromParseResult(
+  parseResult: PayDocumentParseResult,
+): UploadedFileInfo {
+  const teacherNames = new Set<string>();
+  for (const sheet of parseResult.sheets) {
+    for (const block of sheet.blocks) {
+      const name = block.teacherName.value.trim();
+      if (name) teacherNames.add(name);
+    }
+  }
+  const mm = String(parseResult.month).padStart(2, "0");
+  return {
+    name: parseResult.sourceFileName,
+    periodLabel: `${parseResult.year}-${mm} 페이 문서`,
+    teacherCount: teacherNames.size,
+  };
+}
 
 export const useBuilderStore = create<BuilderState>((set) => ({
-  uploaded: false,
+  parseResult: null,
+  calculator: null,
+
+  pendingFile: null,
   payFile: null,
   prevPayoutFile: null,
-  year: "2026",
-  month: "5",
-  cardFeeRate: "0.035",
+  parseError: null,
+  isParsing: false,
 
-  selectedRows: new Set<number>([0]),
-  auxValues: {},
-  taxFlags: {},
+  year: TODAY_YEAR,
+  month: TODAY_MONTH,
 
-  activeInstructor: "김명훈T",
+  selectedRuleIds: {},
+
+  activeTeacherId: null,
   instructorSearch: "",
   exportChecks: new Set<string>(),
 
+  addItemModal: { open: false, entryMode: null },
+
+  // --- upload ---
   setYear: (year) => set({ year }),
   setMonth: (month) => set({ month }),
-  setCardFeeRate: (cardFeeRate) => set({ cardFeeRate }),
+  setPendingFile: (file) => set({ pendingFile: file, parseError: null }),
 
-  buildSettlement: () =>
+  startParsing: () => set({ isParsing: true, parseError: null }),
+
+  ingestParseResult: (parseResult) => {
+    const calculator = createCalculator(parseResult);
+    const teachers = calculator.getTeachers();
+    const firstTeacherId = teachers[0]?.id ?? null;
+
     set({
-      uploaded: true,
-      payFile: INITIAL_PAY_FILE,
-      month: "4",
-    }),
+      parseResult,
+      calculator,
+      payFile: fileInfoFromParseResult(parseResult),
+      year: String(parseResult.year),
+      month: String(parseResult.month),
+      activeTeacherId: firstTeacherId,
+      selectedRuleIds: {},
+      exportChecks: new Set<string>(),
+      instructorSearch: "",
+      parseError: null,
+      isParsing: false,
+    });
+  },
+
+  setParseError: (message) => set({ parseError: message, isParsing: false }),
 
   resetAll: () =>
     set({
-      uploaded: false,
+      parseResult: null,
+      calculator: null,
+      pendingFile: null,
       payFile: null,
       prevPayoutFile: null,
-      year: "2026",
-      month: "5",
-      cardFeeRate: "0.035",
-      selectedRows: new Set<number>([0]),
-      auxValues: {},
-      taxFlags: {},
-      activeInstructor: "김명훈T",
+      parseError: null,
+      isParsing: false,
+      year: TODAY_YEAR,
+      month: TODAY_MONTH,
+      selectedRuleIds: {},
+      activeTeacherId: null,
       instructorSearch: "",
       exportChecks: new Set<string>(),
     }),
 
-  attachMockPayFile: () =>
+  removePayFile: () =>
     set({
-      payFile: INITIAL_PAY_FILE,
-      month: "4",
+      parseResult: null,
+      calculator: null,
+      pendingFile: null,
+      payFile: null,
+      activeTeacherId: null,
+      selectedRuleIds: {},
+      exportChecks: new Set<string>(),
+      parseError: null,
     }),
-
-  attachMockPrevPayoutFile: () =>
-    set({
-      prevPayoutFile: {
-        name: "prev_payout_2026_03.xlsx",
-        periodLabel: "2026-03-01 ~ 2026-03-31",
-        teacherCount: 12,
-      },
-    }),
-
-  removePayFile: () => set({ payFile: null, uploaded: false }),
 
   removePrevPayoutFile: () => set({ prevPayoutFile: null }),
 
-  toggleRow: (index) =>
+  // --- teacher mutations ---
+  addTeacher: (input) => {
+    let createdId: string | null = null;
     set((state) => {
-      const next = new Set(state.selectedRows);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return { selectedRows: next };
+      if (!state.calculator) return state;
+      const { calculator, teacherId } = state.calculator.addTeacher(input);
+      createdId = teacherId;
+      return {
+        calculator,
+        activeTeacherId: teacherId,
+      };
+    });
+    return createdId;
+  },
+
+  removeTeacher: (teacherId) =>
+    set((state) => {
+      if (!state.calculator) return state;
+      const nextCalculator = state.calculator.removeTeacher(teacherId);
+      const nextSelected = { ...state.selectedRuleIds };
+      delete nextSelected[teacherId];
+      const nextExport = new Set(state.exportChecks);
+      nextExport.delete(teacherId);
+      const nextActive =
+        state.activeTeacherId === teacherId
+          ? (nextCalculator.getTeachers()[0]?.id ?? null)
+          : state.activeTeacherId;
+      return {
+        calculator: nextCalculator,
+        selectedRuleIds: nextSelected,
+        exportChecks: nextExport,
+        activeTeacherId: nextActive,
+      };
     }),
 
-  setAux: (index, value) =>
-    set((state) => ({ auxValues: { ...state.auxValues, [index]: value } })),
+  // --- rule mutations ---
+  addRule: (teacherId, rule) =>
+    set((state) =>
+      state.calculator
+        ? { calculator: state.calculator.addRule(teacherId, rule) }
+        : state,
+    ),
 
-  applyAuxRange: (fromIndex, toIndex, value) =>
+  updateRule: (teacherId, ruleId, patch) =>
+    set((state) =>
+      state.calculator
+        ? { calculator: state.calculator.updateRule(teacherId, ruleId, patch) }
+        : state,
+    ),
+
+  removeRule: (teacherId, ruleId) =>
     set((state) => {
-      const [start, end] =
-        fromIndex <= toIndex ? [fromIndex, toIndex] : [toIndex, fromIndex];
-      const next = { ...state.auxValues };
-      for (let i = start; i <= end; i += 1) {
-        next[i] = value;
+      if (!state.calculator) return state;
+      const nextSelected = { ...state.selectedRuleIds };
+      const teacherSet = nextSelected[teacherId];
+      if (teacherSet?.has(ruleId)) {
+        const cloned = new Set(teacherSet);
+        cloned.delete(ruleId);
+        nextSelected[teacherId] = cloned;
       }
-      return { auxValues: next };
+      return {
+        calculator: state.calculator.removeRule(teacherId, ruleId),
+        selectedRuleIds: nextSelected,
+      };
     }),
 
-  setTax: (index, tax) =>
-    set((state) => ({ taxFlags: { ...state.taxFlags, [index]: tax } })),
+  bulkSetAux: (teacherId, ruleIds, value) =>
+    set((state) =>
+      state.calculator
+        ? { calculator: state.calculator.bulkSetAux(teacherId, ruleIds, value) }
+        : state,
+    ),
 
-  initAuxFromDefaults: (defaults) =>
+  bulkSetCustomBase: (teacherId, ruleIds, customBase) =>
+    set((state) =>
+      state.calculator
+        ? {
+            calculator: state.calculator.bulkSetCustomBase(
+              teacherId,
+              ruleIds,
+              customBase,
+            ),
+          }
+        : state,
+    ),
+
+  setRuleTaxable: (teacherId, ruleId, taxable) =>
+    set((state) =>
+      state.calculator
+        ? { calculator: state.calculator.setTaxable(teacherId, ruleId, taxable) }
+        : state,
+    ),
+
+  // --- center ui ---
+  toggleRuleSelection: (teacherId, ruleId) =>
     set((state) => {
-      if (Object.keys(state.auxValues).length > 0) return state;
-      return { auxValues: defaults };
+      const current = state.selectedRuleIds[teacherId] ?? new Set<string>();
+      const next = new Set(current);
+      if (next.has(ruleId)) next.delete(ruleId);
+      else next.add(ruleId);
+      return {
+        selectedRuleIds: { ...state.selectedRuleIds, [teacherId]: next },
+      };
     }),
 
-  initTaxFromDefaults: (defaults) =>
-    set((state) => {
-      if (Object.keys(state.taxFlags).length > 0) return state;
-      return { taxFlags: defaults };
-    }),
-
-  setActiveInstructor: (name) => set({ activeInstructor: name }),
+  // --- right ui ---
+  setActiveTeacherId: (teacherId) => set({ activeTeacherId: teacherId }),
   setInstructorSearch: (value) => set({ instructorSearch: value }),
 
-  toggleExportCheck: (name) =>
+  toggleExportCheck: (teacherId) =>
     set((state) => {
       const next = new Set(state.exportChecks);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(teacherId)) next.delete(teacherId);
+      else next.add(teacherId);
       return { exportChecks: next };
     }),
+
+  // --- add-item modal ---
+  openAddItemModal: (entryMode) =>
+    set({ addItemModal: { open: true, entryMode } }),
+
+  closeAddItemModal: () =>
+    set({ addItemModal: { open: false, entryMode: null } }),
 }));
