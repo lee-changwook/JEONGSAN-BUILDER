@@ -14,8 +14,9 @@
 
 ## File Naming Convention
 
-- **Page files** (under `src/app/`): `kebab-case.tsx` (e.g., `my-page.tsx`)
-- **Component files** (under `src/settla/`, `src/domain/`, etc.): `PascalCase.tsx` (e.g., `MyComponent.tsx`)
+- **Route files** (under `src/app/`): Next.js 규칙에 따라 `kebab-case` (e.g., `my-page/page.tsx`, `loading.tsx`)
+- **Component files** (모든 `components/` 하위): `PascalCase.tsx` (e.g., `MyComponent.tsx`)
+- **그 외 모든 파일** (hooks, store, utils, types 등): `camelCase.ts` (e.g., `useMyHook.ts`, `myStore.ts`)
 
 ## Path Aliases
 

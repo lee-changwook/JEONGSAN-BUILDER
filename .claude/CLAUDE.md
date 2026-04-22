@@ -11,9 +11,16 @@ pnpm lint         # Run ESLint on .ts/.tsx files
 pnpm lint:fix     # Auto-fix lint issues
 pnpm format       # Check Prettier formatting
 pnpm format:write # Apply Prettier formatting
-pnpm typecheck    # Run TypeScript type checking (tsc --noEmit)
+npx tsc --noEmit  # Run TypeScript type checking
 ```
 
 ## Technologies
 
-- **State Management**: Zustand (auth store)
+- **Framework**: Next.js 16 (App Router), React 19
+- **Styling**: Tailwind CSS v4, tw-animate-css
+- **UI Components**: shadcn/ui, Base UI, lucide-react
+- **State Management**: Zustand v5
+- **Excel**: exceljs, xlsx
+- **Validation**: Zod v4
+- **Error Handling**: react-error-boundary
+- **Path Alias**: `@/*` → `src/*`

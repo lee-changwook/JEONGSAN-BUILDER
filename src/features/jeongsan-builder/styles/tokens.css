@@ -1,0 +1,87 @@
+/* ds-aca tokens for 정산 빌더 (scoped via .jb2-scope)
+ * Mirrors the ds-aca design system exported from claude.ai/design.
+ * Kept scoped so it doesn't collide with shadcn globals.
+ */
+
+.jb2-scope {
+  /* Neutrals */
+  --aca-black: #0f121f;
+  --aca-white: #ffffff;
+
+  /* Gray scale */
+  --aca-gray-10: #f5f6fa;
+  --aca-gray-50: #edeff5;
+  --aca-gray-100: #e1e3eb;
+  --aca-gray-200: #c9ccd6;
+  --aca-gray-300: #abaeba;
+  --aca-gray-400: #8b8f9e;
+  --aca-gray-500: #6b6f80;
+  --aca-gray-600: #505466;
+  --aca-gray-700: #323647;
+
+  /* Brand blue */
+  --aca-blue-10: #fafbff;
+  --aca-blue-50: #e8edff;
+  --aca-blue-100: #ebefff;
+  --aca-blue-200: #d6dfff;
+  --aca-blue-300: #adbfff;
+  --aca-blue-400: #859fff;
+  --aca-blue-primary: #4d6be5;
+  --aca-blue-600: #4c69cc;
+
+  /* Danger */
+  --aca-red-10: #ffe7e1;
+  --aca-red-40: #ffbaa8;
+  --aca-red-primary: #ff5226;
+
+  /* Warning */
+  --aca-yellow-10: #fff7d3;
+  --aca-yellow-primary: #ff9a17;
+
+  /* Status green (success / positive) */
+  --aca-green: #1e8e5c;
+  --aca-green-light: #e6f4ec;
+
+  /* Special accent */
+  --aca-revenue-bg: #fff1b8;
+  --aca-revenue-fg: #9c6a00;
+
+  /* Semantic roles */
+  --aca-fg-1: var(--aca-black);
+  --aca-fg-2: var(--aca-gray-600);
+  --aca-fg-3: var(--aca-gray-400);
+  --aca-fg-disabled: var(--aca-gray-300);
+  --aca-fg-link: var(--aca-blue-primary);
+  --aca-fg-danger: var(--aca-red-primary);
+  --aca-fg-warning: var(--aca-yellow-primary);
+
+  --aca-bg-canvas: var(--aca-gray-10);
+  --aca-bg-surface: var(--aca-white);
+  --aca-bg-panel: var(--aca-gray-50);
+  --aca-bg-selected: var(--aca-blue-100);
+  --aca-bg-needs-review: var(--aca-yellow-10);
+  --aca-bg-error: var(--aca-red-10);
+
+  --aca-border-subtle: var(--aca-gray-100);
+  --aca-border-default: var(--aca-gray-200);
+  --aca-border-strong: var(--aca-gray-300);
+  --aca-border-active: var(--aca-black);
+  --aca-border-focus: var(--aca-blue-primary);
+  --aca-border-error: var(--aca-red-primary);
+
+  /* Elevation */
+  --aca-shadow-panel: -5px 0 10px 0 rgba(15, 18, 31, 0.1);
+  --aca-shadow-popover: 0 0 10px 0 rgba(1, 8, 33, 0.1);
+  --aca-shadow-card: 0 1px 2px 0 rgba(15, 18, 31, 0.06);
+}
+
+/* Tabular numerals for monetary/quantitative columns */
+.jb2-scope .jb2-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Monospace style used in the formula column */
+.jb2-scope .jb2-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
