@@ -1,0 +1,24 @@
+/* src/jeongsan/features/components/jeongsan-globals.css */
+/* @theme 블록 없음 — Tailwind v4 전역 토큰 충돌 방지 */
+
+.jb-scope {
+  --jb-bg: #e8ebe8;
+  --jb-surface: #f6f7f4;
+  --jb-text: #0f1a14;
+  --jb-muted: #5c6b5f;
+  --jb-line: #c9d1c8;
+  --jb-field: #fdfefc;
+  --jb-accent: #0f766e;
+  --jb-accent-soft: #ccfbf1;
+  --jb-danger: #b91c1c;
+}
+
+/* 숫자 입력 스피너 제거 */
+.jb-scope input[type="number"] {
+  -moz-appearance: textfield;
+}
+.jb-scope input[type="number"]::-webkit-outer-spin-button,
+.jb-scope input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
