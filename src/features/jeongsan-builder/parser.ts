@@ -86,6 +86,25 @@ function extractBoonbanName(part: string): string | null {
   return match ? match[1].trim() || null : null;
 }
 
+/**
+ * 엑셀 헤더의 시수 표기 규약:
+ *   - `|`로 분리된 파트 중 `시수: {숫자}` 형식이 들어간다.
+ *   - `시수: 12`, `시수 : 8.5`, `시수:20시간`, `시수: 12시` 등 변형 허용.
+ * 숫자만 추출해 number로 반환. 매칭 실패 시 null.
+ */
+const SISU_PART_PATTERN = /^시수\s*:\s*(.+)$/;
+
+function extractHours(part: string): number | null {
+  const match = part.match(SISU_PART_PATTERN);
+  if (!match) return null;
+  const raw = match[1].trim();
+  // "12시간", "8시", 콤마 등 부가 문자 제거 후 숫자화.
+  const numeric = raw.replace(/[,\s]|시간|시/g, "");
+  if (numeric.length === 0) return null;
+  const n = Number(numeric);
+  return Number.isFinite(n) ? n : null;
+}
+
 function parseTitle(titleText: string) {
   const parts = titleText
     .split("|")
@@ -106,11 +125,28 @@ function parseTitle(titleText: string) {
     boonbanName = "보충";
   }
 
+  // 시수: "시수: {숫자}" 파트에서 추출. 없으면 null.
+  let hours: number | null = null;
+  for (const part of parts) {
+    const extracted = extractHours(part);
+    if (extracted !== null) {
+      hours = extracted;
+      break;
+    }
+  }
+
   const scheduleText = titleText.match(/\((\d{1,2}\/[^)]*)\)/)?.[1] ?? null;
   const statusText = titleText.match(/\((종강|진행중|폐강)\)/)?.[1] ?? null;
   const unitPriceText = titleText.match(/회당\s*[\d,]+원/)?.[0] ?? null;
 
-  return { sueopName, boonbanName, scheduleText, statusText, unitPriceText };
+  return {
+    sueopName,
+    boonbanName,
+    scheduleText,
+    statusText,
+    unitPriceText,
+    hours,
+  };
 }
 
 function parseUsageCount(label: string) {
@@ -435,6 +471,7 @@ function parseArrearsBlock(
     scheduleText: null,
     statusText: null,
     unitPriceText: null,
+    hours: null,
     rows,
     totals: summarizeRows(rows),
   } satisfies PayDocumentBlock;

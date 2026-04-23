@@ -123,6 +123,8 @@ export type PayDocumentBlock = {
   scheduleText: string | null;
   statusText: string | null;
   unitPriceText: string | null;
+  /** 엑셀 헤더 `시수: {숫자}`에서 파싱된 시수. 없으면 null. */
+  hours: number | null;
   rows: PayDocumentRow[];
   totals: PayDocumentBlockTotals;
 };

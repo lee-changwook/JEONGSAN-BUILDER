@@ -61,7 +61,14 @@ function parseTitle(titleText: string) {
   const statusText = titleText.match(/\((종강|진행중|폐강)\)/)?.[1] ?? null;
   const unitPriceText = titleText.match(/회당\s*[\d,]+원/)?.[0] ?? null;
 
-  return { sueopName, boonbanName, scheduleText, statusText, unitPriceText };
+  return {
+    sueopName,
+    boonbanName,
+    scheduleText,
+    statusText,
+    unitPriceText,
+    hours: null as number | null,
+  };
 }
 
 function parseUsageCount(label: string) {
@@ -360,6 +367,7 @@ function parseArrearsBlock(
     scheduleText: null,
     statusText: null,
     unitPriceText: null,
+    hours: null,
     rows,
     totals: summarizeRows(rows),
   } satisfies PayDocumentBlock;

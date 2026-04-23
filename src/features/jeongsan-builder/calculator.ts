@@ -203,7 +203,8 @@ function blockToClassItem(
     description,
     statusText: block.statusText,
     students,
-    hours: 0,
+    // 엑셀 헤더의 `시수: {숫자}`에서 파싱된 값. 헤더에 없으면 0으로 기본.
+    hours: block.hours ?? 0,
     // 매출 (수수료 포함) = 납부액 원본
     // 순매출 (수수료 제외) = PAY (카드 수수료 차감 후 학원 실입금)
     revenueVAT: block.totals.nabipTotal,
