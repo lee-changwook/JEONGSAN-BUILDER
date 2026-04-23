@@ -11,6 +11,11 @@ import {
 } from "@/features/jeongsan-builder/components/RightPanel/RightPanelSearch";
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 import { formatKRW } from "@/features/jeongsan-builder/calculator";
+import {
+  buildSettlementExport,
+  downloadArtifact,
+  type ExportMode,
+} from "@/features/jeongsan-builder/exporter";
 
 interface RightPanelProps {
   empty?: boolean;
@@ -30,6 +35,7 @@ export function RightPanel({ empty }: RightPanelProps) {
   const [addFormOpen, setAddFormOpen] = useState(false);
   const [newTeacherName, setNewTeacherName] = useState("");
   const [newTeacherSubject, setNewTeacherSubject] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const allRows =
     empty || !calculator
@@ -98,35 +104,44 @@ export function RightPanel({ empty }: RightPanelProps) {
     setAddFormOpen(false);
   }
 
+  async function runExport(mode: ExportMode) {
+    if (!calculator || exporting) return;
+    setExporting(true);
+    try {
+      const artifact = await buildSettlementExport({
+        calculator,
+        mode,
+        teacherIds: mode === "all" ? undefined : [...exportChecks],
+      });
+      downloadArtifact(artifact);
+    } catch (error) {
+      console.error("[jeongsan-builder] export failed", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "엑셀 내보내기에 실패했습니다.";
+      alert(message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
-    <aside
-      className="flex h-full w-[320px] min-w-[300px] shrink-0 flex-col"
-      style={{
-        background: "var(--aca-gray-10)",
-        borderLeft: "1px solid var(--aca-gray-100)",
-        boxShadow: "-5px 0 10px 0 rgba(15,18,31,0.05)",
-      }}
-    >
+    <aside className="flex h-full w-[320px] min-w-[300px] shrink-0 flex-col border-l border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)] shadow-[-5px_0_10px_0_rgba(15,18,31,0.05)]">
       {/* Header */}
-      <div
-        className="px-3.5 py-3.5"
-        style={{
-          background: "var(--aca-white)",
-          borderBottom: "1px solid var(--aca-gray-100)",
-        }}
-      >
+      <div className="border-b border-[var(--aca-gray-100)] bg-[var(--aca-white)] px-3.5 py-3.5">
         <div className="mb-2.5 flex items-center justify-between">
           <div
-            className="text-sm font-bold"
-            style={{ color: empty ? "var(--aca-gray-400)" : "var(--aca-black)" }}
+            className={`text-sm font-bold ${
+              empty ? "text-[var(--aca-gray-400)]" : "text-[var(--aca-black)]"
+            }`}
           >
             강사
           </div>
           <div
-            className="text-xs font-semibold"
-            style={{
-              color: empty ? "var(--aca-gray-300)" : "var(--aca-gray-500)",
-            }}
+            className={`text-xs font-semibold ${
+              empty ? "text-[var(--aca-gray-300)]" : "text-[var(--aca-gray-500)]"
+            }`}
           >
             {empty ? 0 : filtered.length}
           </div>
@@ -143,36 +158,27 @@ export function RightPanel({ empty }: RightPanelProps) {
           disabled={empty}
           onClick={handleToggleForm}
           aria-expanded={addFormOpen}
-          className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-          style={{
-            background: addFormOpen
-              ? "var(--aca-blue-primary)"
-              : "var(--aca-blue-100)",
-            color: addFormOpen ? "var(--aca-white)" : "var(--aca-blue-primary)",
-            border: `1px solid ${addFormOpen ? "var(--aca-blue-primary)" : "var(--aca-blue-200)"}`,
-            fontFamily: "inherit",
-            cursor: empty ? "not-allowed" : "pointer",
-          }}
+          className={`mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] border font-[inherit] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${
+            empty ? "cursor-not-allowed" : "cursor-pointer"
+          } ${
+            addFormOpen
+              ? "border-[var(--aca-blue-primary)] bg-[var(--aca-blue-primary)] text-[var(--aca-white)]"
+              : "border-[var(--aca-blue-200)] bg-[var(--aca-blue-100)] text-[var(--aca-blue-primary)]"
+          }`}
         >
           <Plus
-            className="size-3.5 transition-transform"
-            style={{ transform: addFormOpen ? "rotate(45deg)" : "none" }}
+            className={`size-3.5 transition-transform ${
+              addFormOpen ? "rotate-45" : "rotate-0"
+            }`}
           />
           정산 대상 추가
         </button>
 
         {addFormOpen && !empty && (
-          <div
-            className="mt-2.5 flex flex-col gap-2 rounded-[6px] p-3"
-            style={{
-              background: "var(--aca-gray-10)",
-              border: "1px solid var(--aca-gray-100)",
-            }}
-          >
+          <div className="mt-2.5 flex flex-col gap-2 rounded-[6px] border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)] p-3">
             <div className="flex flex-col gap-1">
               <label
-                className="text-[11px] font-semibold"
-                style={{ color: "var(--aca-gray-600)" }}
+                className="text-[11px] font-semibold text-[var(--aca-gray-600)]"
                 htmlFor="new-teacher-name"
               >
                 정산 대상 이름 *
@@ -187,20 +193,13 @@ export function RightPanel({ empty }: RightPanelProps) {
                 }}
                 placeholder="예: 김강사"
                 autoFocus
-                className="h-8 w-full rounded-[4px] border-none bg-[var(--aca-white)] px-2.5 text-[13px] outline-none"
-                style={{
-                  fontFamily: "inherit",
-                  color: "var(--aca-black)",
-                  border: "1px solid var(--aca-gray-200)",
-                  boxShadow: "inset 0 0 0 1px var(--aca-gray-200)",
-                }}
+                className="h-8 w-full rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-2.5 font-[inherit] text-[13px] text-[var(--aca-black)] shadow-[inset_0_0_0_1px_var(--aca-gray-200)] outline-none"
               />
             </div>
 
             <div className="flex flex-col gap-1">
               <label
-                className="text-[11px] font-semibold"
-                style={{ color: "var(--aca-gray-600)" }}
+                className="text-[11px] font-semibold text-[var(--aca-gray-600)]"
                 htmlFor="new-teacher-subject"
               >
                 과목 (선택)
@@ -214,12 +213,7 @@ export function RightPanel({ empty }: RightPanelProps) {
                   if (e.key === "Escape") handleCancel();
                 }}
                 placeholder="예: 수학"
-                className="h-8 w-full rounded-[4px] border-none bg-[var(--aca-white)] px-2.5 text-[13px] outline-none"
-                style={{
-                  fontFamily: "inherit",
-                  color: "var(--aca-black)",
-                  boxShadow: "inset 0 0 0 1px var(--aca-gray-200)",
-                }}
+                className="h-8 w-full rounded-[4px] border-none bg-[var(--aca-white)] px-2.5 font-[inherit] text-[13px] text-[var(--aca-black)] shadow-[inset_0_0_0_1px_var(--aca-gray-200)] outline-none"
               />
             </div>
 
@@ -227,12 +221,7 @@ export function RightPanel({ empty }: RightPanelProps) {
               <button
                 type="button"
                 onClick={handleCancel}
-                className="h-7 cursor-pointer rounded-[4px] px-3 text-[12px] font-semibold"
-                style={{
-                  background: "var(--aca-white)",
-                  color: "var(--aca-gray-600)",
-                  border: "1px solid var(--aca-gray-200)",
-                }}
+                className="h-7 cursor-pointer rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-3 text-[12px] font-semibold text-[var(--aca-gray-600)]"
               >
                 취소
               </button>
@@ -240,12 +229,7 @@ export function RightPanel({ empty }: RightPanelProps) {
                 type="button"
                 disabled={!canSubmit}
                 onClick={handleSubmit}
-                className="h-7 cursor-pointer rounded-[4px] px-3 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                style={{
-                  background: "var(--aca-black)",
-                  color: "var(--aca-white)",
-                  border: "none",
-                }}
+                className="h-7 cursor-pointer rounded-[4px] border-none bg-[var(--aca-black)] px-3 text-[12px] font-semibold text-[var(--aca-white)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 완료
               </button>
@@ -257,14 +241,8 @@ export function RightPanel({ empty }: RightPanelProps) {
       {/* Body */}
       {empty ? (
         <div className="flex flex-1 items-center justify-center p-6">
-          <div
-            className="text-center text-xs leading-[1.6]"
-            style={{ color: "var(--aca-gray-400)" }}
-          >
-            <div
-              className="mb-1 text-[13px] font-semibold"
-              style={{ color: "var(--aca-gray-500)" }}
-            >
+          <div className="text-center text-xs leading-[1.6] text-[var(--aca-gray-400)]">
+            <div className="mb-1 text-[13px] font-semibold text-[var(--aca-gray-500)]">
               데이터가 없습니다
             </div>
             <div>
@@ -277,14 +255,8 @@ export function RightPanel({ empty }: RightPanelProps) {
       ) : (
         <div className="flex-1 overflow-auto">
           {filtered.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center gap-1 p-8 text-center text-xs"
-              style={{ color: "var(--aca-gray-400)" }}
-            >
-              <div
-                className="text-[13px] font-semibold"
-                style={{ color: "var(--aca-gray-500)" }}
-              >
+            <div className="flex flex-col items-center justify-center gap-1 p-8 text-center text-xs text-[var(--aca-gray-400)]">
+              <div className="text-[13px] font-semibold text-[var(--aca-gray-500)]">
                 검색 결과가 없습니다
               </div>
               <div>다른 키워드로 시도해 보세요</div>
@@ -308,8 +280,12 @@ export function RightPanel({ empty }: RightPanelProps) {
       )}
 
       <RightPanelFooter
-        disabled={empty}
+        disabled={empty || !calculator}
         selectedExportCount={selectedExportCount}
+        exporting={exporting}
+        onExportAll={() => void runExport("all")}
+        onExportPerFile={() => void runExport("per-file")}
+        onExportPerSheet={() => void runExport("per-sheet")}
       />
     </aside>
   );

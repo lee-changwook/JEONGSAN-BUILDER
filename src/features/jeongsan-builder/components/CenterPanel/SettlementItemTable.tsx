@@ -177,8 +177,8 @@ function RevenueMetrics({
                 it.value === 0
                   ? "var(--aca-black)"
                   : it.tone === "unpaid"
-                    ? "var(--aca-red-primary)"
-                    : "var(--aca-blue-primary)",
+                    ? "var(--aca-blue-primary)"
+                    : "var(--aca-red-primary)",
             }}
           >
             {formatKRW(it.value)}
@@ -215,6 +215,7 @@ function baseValueOf(base: BaseId, agg: ClassAggregate): number {
 interface RowProps {
   teacherId: string;
   rule: RuleItem;
+  ordinal: number;
   calculator: SettlementCalculator;
   selected: boolean;
   valueCellSelected: boolean;
@@ -232,6 +233,7 @@ interface RowProps {
 function ItemRow({
   teacherId,
   rule,
+  ordinal,
   calculator,
   selected,
   valueCellSelected,
@@ -316,7 +318,7 @@ function ItemRow({
         <MiniCheckbox checked={selected} onChange={onToggle} color="#2BB673" />
       </td>
       <td className="w-[50px] px-1.5 py-3 align-top">
-        {rule.rule ? <RoundTag label={rule.rule} /> : null}
+        <RoundTag label={String(ordinal)} />
       </td>
       <td className="w-[44px] px-1.5 py-3 align-top">
         <TypeBadge cat={rule.cat} />
@@ -337,10 +339,7 @@ function ItemRow({
           )}
         </div>
         {rule.description && (
-          <div
-            className="mt-[3px] text-[11.5px] leading-[1.5]"
-            style={{ color: "var(--aca-gray-500)" }}
-          >
+          <div className="mt-[3px] text-[11.5px] leading-[1.5] text-[var(--aca-gray-500)]">
             {rule.description}
           </div>
         )}
@@ -385,10 +384,7 @@ function ItemRow({
             cellSelected={valueCellSelected}
           />
         ) : (
-          <div
-            className="flex h-7 items-center justify-center text-xs"
-            style={{ color: "var(--aca-gray-300)" }}
-          >
+          <div className="flex h-7 items-center justify-center text-xs text-[var(--aca-gray-300)]">
             —
           </div>
         )}
@@ -402,10 +398,7 @@ function ItemRow({
         </div>
       </td>
       <td className="min-w-[150px] px-2.5 py-3 align-top">
-        <span
-          className="jb2-mono text-[11.5px]"
-          style={{ color: "var(--aca-gray-600)" }}
-        >
+        <span className="jb2-mono text-[11.5px] text-[var(--aca-gray-600)]">
           {formula}
         </span>
       </td>
@@ -414,11 +407,11 @@ function ItemRow({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div
-          className="jb2-tnum whitespace-nowrap text-[13.5px] font-bold"
-          style={{
-            color:
-              rule.cat === "minus" ? "var(--aca-red-primary)" : "var(--aca-black)",
-          }}
+          className={`jb2-tnum whitespace-nowrap text-[13.5px] font-bold ${
+            rule.cat === "minus"
+              ? "text-[var(--aca-red-primary)]"
+              : "text-[var(--aca-black)]"
+          }`}
         >
           {formatKRW(result)}
         </div>
@@ -432,10 +425,7 @@ function ItemRow({
             <ChevronRight className="size-2.5" />
           </CourseDetailPopover>
         ) : (
-          <span
-            className="mt-1 inline-flex items-center gap-0.5 text-[11px]"
-            style={{ color: "var(--aca-gray-300)" }}
-          >
+          <span className="mt-1 inline-flex items-center gap-0.5 text-[11px] text-[var(--aca-gray-300)]">
             상세
             <ChevronRight className="size-2.5" />
           </span>
@@ -550,34 +540,26 @@ export function SettlementItemTable() {
 
   return (
     <div
-      className="flex-1 select-none overflow-auto"
-      style={{ background: "var(--aca-white)" }}
+      className="flex-1 select-none overflow-auto bg-[var(--aca-white)]"
       {...cellSel.wrapperProps}
     >
       <table className="jb2-tnum jb2-rule-table w-full border-separate border-spacing-0">
         <thead>
-          <tr
-            className="sticky top-0 z-[1]"
-            style={{
-              background: "#F7F5EE",
-              borderBottom: "1px solid var(--aca-gray-100)",
-            }}
-          >
-            {COLUMNS.map((h, i) => (
-              <th
-                key={h || `col-${i}`}
-                className="px-2 py-2.5 text-[11px] font-semibold tracking-[0.2px]"
-                style={{
-                  color: "var(--aca-gray-500)",
-                  textAlign: i >= 9 ? "right" : i === 7 ? "center" : "left",
-                  paddingLeft: i === 0 ? 16 : 8,
-                  paddingRight: i === 9 ? 16 : 8,
-                  borderBottom: "1px solid var(--aca-gray-200)",
-                }}
-              >
-                {h}
-              </th>
-            ))}
+          <tr className="sticky top-0 z-[1] border-b border-[var(--aca-gray-100)] bg-[#F7F5EE]">
+            {COLUMNS.map((h, i) => {
+              const alignClass =
+                i >= 9 ? "text-right" : i === 7 ? "text-center" : "text-left";
+              const padLeftClass = i === 0 ? "pl-4" : "pl-2";
+              const padRightClass = i === 9 ? "pr-4" : "pr-2";
+              return (
+                <th
+                  key={h || `col-${i}`}
+                  className={`border-b border-[var(--aca-gray-200)] py-2.5 text-[11px] font-semibold tracking-[0.2px] text-[var(--aca-gray-500)] ${alignClass} ${padLeftClass} ${padRightClass}`}
+                >
+                  {h}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -585,18 +567,18 @@ export function SettlementItemTable() {
             <tr>
               <td
                 colSpan={COLUMNS.length}
-                className="px-6 py-12 text-center text-xs"
-                style={{ color: "var(--aca-gray-400)" }}
+                className="px-6 py-12 text-center text-xs text-[var(--aca-gray-400)]"
               >
                 정산 항목이 없습니다. &ldquo;항목 추가&rdquo;로 시작하세요.
               </td>
             </tr>
           ) : (
-            rules.map((rule) => (
+            rules.map((rule, idx) => (
               <ItemRow
                 key={rule.id}
                 teacherId={activeTeacherId}
                 rule={rule}
+                ordinal={idx + 1}
                 calculator={calculator}
                 selected={selectedRuleIds.has(rule.id)}
                 valueCellSelected={cellSel.isSelected(rule.id, "value")}
