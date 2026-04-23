@@ -20,39 +20,28 @@ function MetricCell({
   negative,
   highlight,
 }: MetricCellProps) {
-  const color = highlight
-    ? "var(--aca-blue-primary)"
+  const valueColorClass = highlight
+    ? "text-[var(--aca-blue-primary)]"
     : positive
-      ? "var(--aca-green)"
+      ? "text-[var(--aca-green)]"
       : negative
-        ? "var(--aca-red-primary)"
-        : "var(--aca-black)";
+        ? "text-[var(--aca-red-primary)]"
+        : "text-[var(--aca-black)]";
+  const valueSizeClass = highlight
+    ? "text-[15px] font-bold"
+    : "text-[13.5px] font-semibold";
   return (
-    <div
-      className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5"
-      style={{ borderRight: "1px solid var(--aca-gray-100)" }}
-    >
-      <div
-        className="text-[10.5px] font-medium"
-        style={{ color: "var(--aca-gray-500)" }}
-      >
+    <div className="flex min-w-0 flex-col gap-0.5 border-r border-[var(--aca-gray-100)] px-3 py-2.5">
+      <div className="text-[10.5px] font-medium text-[var(--aca-gray-500)]">
         {label}
       </div>
       <div
-        className="jb2-tnum truncate tracking-[-0.2px]"
-        style={{
-          fontSize: highlight ? 15 : 13.5,
-          fontWeight: highlight ? 700 : 600,
-          color,
-        }}
+        className={`jb2-tnum truncate tracking-[-0.2px] ${valueSizeClass} ${valueColorClass}`}
       >
         {value}
       </div>
       {hint && (
-        <div
-          className="truncate text-[10px]"
-          style={{ color: "var(--aca-gray-400)" }}
-        >
+        <div className="truncate text-[10px] text-[var(--aca-gray-400)]">
           {hint}
         </div>
       )}
@@ -78,37 +67,21 @@ export function InstructorCardHeader() {
     .join(" · ");
 
   return (
-    <div
-      className="flex flex-col gap-3.5 px-5 py-4"
-      style={{
-        background: "var(--aca-white)",
-        borderBottom: "1px solid var(--aca-gray-100)",
-      }}
-    >
+    <div className="flex flex-col gap-3.5 border-b border-[var(--aca-gray-100)] bg-[var(--aca-white)] px-5 py-4">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-2">
-            <span
-              className="text-[22px] font-bold tracking-[-0.3px]"
-              style={{ color: "var(--aca-black)" }}
-            >
+            <span className="text-[22px] font-bold tracking-[-0.3px] text-[var(--aca-black)]">
               {teacher.name}
             </span>
           </div>
-          <div className="text-[13px]" style={{ color: "var(--aca-gray-500)" }}>
+          <div className="text-[13px] text-[var(--aca-gray-500)]">
             {teacher.subjectLabel}
           </div>
         </div>
       </div>
 
-      <div
-        className="grid overflow-hidden rounded-md"
-        style={{
-          gridTemplateColumns: "auto 1fr 1fr 1fr 1fr 1fr 1fr",
-          background: "var(--aca-gray-10)",
-          border: "1px solid var(--aca-gray-100)",
-        }}
-      >
+      <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr] overflow-hidden rounded-md border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)]">
         <MetricCell
           label="항목"
           value={`${summary.itemCount}개`}

@@ -22,25 +22,19 @@ export function MiniDropdown<T extends string = string>({
 }: MiniDropdownProps<T>) {
   return (
     <div
-      className="relative flex h-7 w-full items-center rounded-[4px] px-2 text-xs"
-      style={{
-        background: disabled ? "var(--aca-gray-10)" : "var(--aca-white)",
-        color: "var(--aca-black)",
-        border: "1px solid var(--aca-gray-200)",
-        fontFamily: "inherit",
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
+      className={`relative flex h-7 w-full items-center rounded-[4px] border border-[var(--aca-gray-200)] px-2 font-[inherit] text-xs text-[var(--aca-black)] ${
+        disabled
+          ? "cursor-not-allowed bg-[var(--aca-gray-10)]"
+          : "cursor-pointer bg-[var(--aca-white)]"
+      }`}
     >
       <select
         value={value}
         disabled={disabled}
         onChange={(e) => onChange?.(e.target.value as T)}
-        className="w-full cursor-pointer appearance-none border-none bg-transparent pr-5 text-xs outline-none"
-        style={{
-          color: "var(--aca-black)",
-          fontFamily: "inherit",
-          cursor: disabled ? "not-allowed" : "pointer",
-        }}
+        className={`w-full appearance-none border-none bg-transparent pr-5 font-[inherit] text-xs text-[var(--aca-black)] outline-none ${
+          disabled ? "cursor-not-allowed" : "cursor-pointer"
+        }`}
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -48,10 +42,7 @@ export function MiniDropdown<T extends string = string>({
           </option>
         ))}
       </select>
-      <ChevronDown
-        className="pointer-events-none absolute right-2 size-3.5"
-        style={{ color: "var(--aca-gray-500)" }}
-      />
+      <ChevronDown className="pointer-events-none absolute right-2 size-3.5 text-[var(--aca-gray-500)]" />
     </div>
   );
 }

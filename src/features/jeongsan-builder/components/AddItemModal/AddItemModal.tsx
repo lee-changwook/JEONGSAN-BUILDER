@@ -90,26 +90,16 @@ function CategoryPicker({ onPick }: { onPick: (mode: CategoryId) => void }) {
       <button
         type="button"
         onClick={() => onPick("revenue")}
-        className="flex cursor-pointer items-start gap-3 rounded-md p-4 text-left transition-colors hover:bg-[var(--aca-gray-10)]"
-        style={{ border: "1px solid var(--aca-gray-200)" }}
+        className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--aca-gray-200)] p-4 text-left transition-colors hover:bg-[var(--aca-gray-10)]"
       >
-        <span
-          className="inline-flex h-[22px] min-w-8 shrink-0 items-center justify-center rounded px-1.5 text-[11px] font-bold tracking-[0.4px]"
-          style={{
-            background: "var(--aca-revenue-bg)",
-            color: "var(--aca-revenue-fg)",
-          }}
-        >
+        <span className="inline-flex h-[22px] min-w-8 shrink-0 items-center justify-center rounded bg-[var(--aca-revenue-bg)] px-1.5 text-[11px] font-bold tracking-[0.4px] text-[var(--aca-revenue-fg)]">
           R
         </span>
         <div className="min-w-0">
-          <div
-            className="text-[14px] font-semibold"
-            style={{ color: "var(--aca-black)" }}
-          >
+          <div className="text-[14px] font-semibold text-[var(--aca-black)]">
             수업 기반
           </div>
-          <div className="mt-0.5 text-xs" style={{ color: "var(--aca-gray-500)" }}>
+          <div className="mt-0.5 text-xs text-[var(--aca-gray-500)]">
             수업 ERP 데이터(매출·시수·학생수)에서 자동 계산
           </div>
         </div>
@@ -118,26 +108,16 @@ function CategoryPicker({ onPick }: { onPick: (mode: CategoryId) => void }) {
       <button
         type="button"
         onClick={() => onPick("plus")}
-        className="flex cursor-pointer items-start gap-3 rounded-md p-4 text-left transition-colors hover:bg-[var(--aca-gray-10)]"
-        style={{ border: "1px solid var(--aca-gray-200)" }}
+        className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--aca-gray-200)] p-4 text-left transition-colors hover:bg-[var(--aca-gray-10)]"
       >
-        <span
-          className="inline-flex size-[22px] shrink-0 items-center justify-center rounded text-sm font-bold"
-          style={{
-            background: "var(--aca-blue-100)",
-            color: "var(--aca-blue-primary)",
-          }}
-        >
+        <span className="inline-flex size-[22px] shrink-0 items-center justify-center rounded bg-[var(--aca-blue-100)] text-sm font-bold text-[var(--aca-blue-primary)]">
           +
         </span>
         <div className="min-w-0">
-          <div
-            className="text-[14px] font-semibold"
-            style={{ color: "var(--aca-black)" }}
-          >
+          <div className="text-[14px] font-semibold text-[var(--aca-black)]">
             지급 (+)
           </div>
-          <div className="mt-0.5 text-xs" style={{ color: "var(--aca-gray-500)" }}>
+          <div className="mt-0.5 text-xs text-[var(--aca-gray-500)]">
             월급·수당·보너스 등 수기 입력 지급
           </div>
         </div>
@@ -146,26 +126,16 @@ function CategoryPicker({ onPick }: { onPick: (mode: CategoryId) => void }) {
       <button
         type="button"
         onClick={() => onPick("minus")}
-        className="flex cursor-pointer items-start gap-3 rounded-md p-4 text-left transition-colors hover:bg-[var(--aca-gray-10)]"
-        style={{ border: "1px solid var(--aca-gray-200)" }}
+        className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--aca-gray-200)] p-4 text-left transition-colors hover:bg-[var(--aca-gray-10)]"
       >
-        <span
-          className="inline-flex size-[22px] shrink-0 items-center justify-center rounded text-sm font-bold"
-          style={{
-            background: "var(--aca-red-10)",
-            color: "var(--aca-red-primary)",
-          }}
-        >
+        <span className="inline-flex size-[22px] shrink-0 items-center justify-center rounded bg-[var(--aca-red-10)] text-sm font-bold text-[var(--aca-red-primary)]">
           −
         </span>
         <div className="min-w-0">
-          <div
-            className="text-[14px] font-semibold"
-            style={{ color: "var(--aca-black)" }}
-          >
+          <div className="text-[14px] font-semibold text-[var(--aca-black)]">
             차감 (−)
           </div>
-          <div className="mt-0.5 text-xs" style={{ color: "var(--aca-gray-500)" }}>
+          <div className="mt-0.5 text-xs text-[var(--aca-gray-500)]">
             조교비·미납 분담·기타 비용 차감
           </div>
         </div>
@@ -213,42 +183,23 @@ function CourseSelector({
 
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className="text-[12px] font-semibold"
-        style={{ color: "var(--aca-gray-600)" }}
-      >
+      <div className="text-[12px] font-semibold text-[var(--aca-gray-600)]">
         수업 선택
       </div>
-      <div
-        className="flex h-8 items-stretch overflow-hidden rounded-[4px]"
-        style={{
-          background: "var(--aca-white)",
-          border: "1px solid var(--aca-gray-200)",
-        }}
-      >
+      <div className="flex h-8 items-stretch overflow-hidden rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)]">
         <input
           value={state.courseSearch}
           onChange={(e) => onChange({ courseSearch: e.target.value })}
           placeholder="수업 검색"
-          className="min-w-0 flex-1 border-none bg-transparent px-2.5 text-[13px] outline-none"
-          style={{ fontFamily: "inherit" }}
+          className="min-w-0 flex-1 border-none bg-transparent px-2.5 font-[inherit] text-[13px] outline-none"
         />
-        <div
-          className="flex items-center px-2.5"
-          style={{ color: "var(--aca-gray-400)" }}
-        >
+        <div className="flex items-center px-2.5 text-[var(--aca-gray-400)]">
           <SearchIcon className="size-3.5" />
         </div>
       </div>
-      <div
-        className="max-h-[220px] overflow-y-auto rounded-[4px]"
-        style={{ border: "1px solid var(--aca-gray-100)" }}
-      >
+      <div className="max-h-[220px] overflow-y-auto rounded-[4px] border border-[var(--aca-gray-100)]">
         {filtered.length === 0 ? (
-          <div
-            className="p-4 text-center text-xs"
-            style={{ color: "var(--aca-gray-400)" }}
-          >
+          <div className="p-4 text-center text-xs text-[var(--aca-gray-400)]">
             표시할 수업이 없습니다
           </div>
         ) : (
@@ -263,11 +214,9 @@ function CourseSelector({
                 tabIndex={0}
                 onClick={() => toggle(c.id)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggle(c.id); }}
-                className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left"
-                style={{
-                  background: checked ? "var(--aca-blue-10)" : "var(--aca-white)",
-                  borderBottom: "1px solid var(--aca-gray-100)",
-                }}
+                className={`flex w-full cursor-pointer items-center gap-2.5 border-b border-[var(--aca-gray-100)] px-3 py-2 text-left ${
+                  checked ? "bg-[var(--aca-blue-10)]" : "bg-[var(--aca-white)]"
+                }`}
               >
                 <MiniCheckbox
                   checked={checked}
@@ -366,10 +315,7 @@ function BaseValuePicker({
 
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className="text-[12px] font-semibold"
-        style={{ color: "var(--aca-gray-600)" }}
-      >
+      <div className="text-[12px] font-semibold text-[var(--aca-gray-600)]">
         베이스값
       </div>
       <div className="grid grid-cols-2 gap-1.5">
@@ -377,28 +323,27 @@ function BaseValuePicker({
           const selected = state.base === opt.id;
           const baseVal = valueByBase[opt.id];
           const isCount = COUNT_BASES.has(opt.id);
+          const containerClass = selected
+            ? "border-[var(--aca-blue-primary)] bg-[var(--aca-blue-100)] text-[var(--aca-blue-primary)]"
+            : "border-[var(--aca-gray-200)] bg-[var(--aca-white)] text-[var(--aca-black)]";
+          const hintClass = selected
+            ? "text-[var(--aca-blue-primary)]"
+            : "text-[var(--aca-gray-500)]";
+          const valueClass = selected
+            ? "text-[var(--aca-blue-primary)]"
+            : isCount
+              ? "text-[var(--aca-black)]"
+              : "text-[var(--aca-gray-700)]";
           return (
             <button
               key={opt.id}
               type="button"
               onClick={() => onChange({ base: opt.id })}
-              className="flex cursor-pointer items-center justify-between gap-3 rounded-[4px] px-3 py-2 text-left"
-              style={{
-                background: selected ? "var(--aca-blue-100)" : "var(--aca-white)",
-                border: `1px solid ${selected ? "var(--aca-blue-primary)" : "var(--aca-gray-200)"}`,
-                color: selected ? "var(--aca-blue-primary)" : "var(--aca-black)",
-              }}
+              className={`flex cursor-pointer items-center justify-between gap-3 rounded-[4px] border px-3 py-2 text-left ${containerClass}`}
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="text-[13px] font-semibold">{opt.label}</div>
-                <div
-                  className="text-[11px]"
-                  style={{
-                    color: selected
-                      ? "var(--aca-blue-primary)"
-                      : "var(--aca-gray-500)",
-                  }}
-                >
+                <div className={`text-[11px] ${hintClass}`}>
                   {opt.hint}
                 </div>
               </div>
@@ -437,28 +382,18 @@ function CustomBaseInput({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className="text-[12px] font-semibold"
-        style={{ color: "var(--aca-gray-600)" }}
-      >
+      <div className="text-[12px] font-semibold text-[var(--aca-gray-600)]">
         금액
       </div>
-      <div
-        className="flex h-9 items-center rounded-[4px] px-3"
-        style={{
-          background: "var(--aca-white)",
-          border: "1px solid var(--aca-gray-200)",
-        }}
-      >
+      <div className="flex h-9 items-center rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-3">
         <input
           value={state.customBase}
           onChange={(e) => onChange({ customBase: e.target.value })}
           placeholder="금액을 입력하세요"
           inputMode="numeric"
-          className="w-full border-none bg-transparent text-[14px] outline-none"
-          style={{ fontFamily: "inherit", color: "var(--aca-black)" }}
+          className="w-full border-none bg-transparent font-[inherit] text-[14px] text-[var(--aca-black)] outline-none"
         />
-        <span className="text-xs" style={{ color: "var(--aca-gray-400)" }}>
+        <span className="text-xs text-[var(--aca-gray-400)]">
           원
         </span>
       </div>
@@ -476,26 +411,21 @@ function FormulaPicker({
   const current = OP_OPTIONS.find((o) => o.id === state.op);
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className="text-[12px] font-semibold"
-        style={{ color: "var(--aca-gray-600)" }}
-      >
+      <div className="text-[12px] font-semibold text-[var(--aca-gray-600)]">
         수식
       </div>
       <div className="flex flex-wrap gap-1.5">
         {OP_OPTIONS.map((opt) => {
           const selected = state.op === opt.id;
+          const buttonClass = selected
+            ? "border-[var(--aca-black)] bg-[var(--aca-black)] text-[var(--aca-white)]"
+            : "border-[var(--aca-gray-200)] bg-[var(--aca-white)] text-[var(--aca-gray-700)]";
           return (
             <button
               key={opt.id}
               type="button"
               onClick={() => onChange({ op: opt.id })}
-              className="cursor-pointer rounded-[4px] px-3 py-1.5 text-[12px] font-semibold"
-              style={{
-                background: selected ? "var(--aca-black)" : "var(--aca-white)",
-                color: selected ? "var(--aca-white)" : "var(--aca-gray-700)",
-                border: `1px solid ${selected ? "var(--aca-black)" : "var(--aca-gray-200)"}`,
-              }}
+              className={`cursor-pointer rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold ${buttonClass}`}
               title={opt.hint}
             >
               {opt.label}
@@ -505,26 +435,16 @@ function FormulaPicker({
       </div>
       {current?.needsAux && (
         <div className="flex flex-col gap-1">
-          <label
-            className="text-[11px] font-medium"
-            style={{ color: "var(--aca-gray-500)" }}
-          >
+          <label className="text-[11px] font-medium text-[var(--aca-gray-500)]">
             {current.auxLabel}
           </label>
-          <div
-            className="flex h-8 items-center rounded-[4px] px-2.5"
-            style={{
-              background: "var(--aca-white)",
-              border: "1px solid var(--aca-gray-200)",
-            }}
-          >
+          <div className="flex h-8 items-center rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-2.5">
             <input
               value={state.value}
               onChange={(e) => onChange({ value: e.target.value })}
               placeholder={current.auxPlaceholder}
               inputMode="decimal"
-              className="w-full border-none bg-transparent text-[13px] outline-none"
-              style={{ fontFamily: "inherit", color: "var(--aca-black)" }}
+              className="w-full border-none bg-transparent font-[inherit] text-[13px] text-[var(--aca-black)] outline-none"
             />
           </div>
         </div>
@@ -542,25 +462,15 @@ function NamingStep({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className="text-[12px] font-semibold"
-        style={{ color: "var(--aca-gray-600)" }}
-      >
+      <div className="text-[12px] font-semibold text-[var(--aca-gray-600)]">
         항목 이름
       </div>
-      <div
-        className="flex h-9 items-center rounded-[4px] px-3"
-        style={{
-          background: "var(--aca-white)",
-          border: "1px solid var(--aca-gray-200)",
-        }}
-      >
+      <div className="flex h-9 items-center rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-3">
         <input
           value={state.name}
           onChange={(e) => onChange({ name: e.target.value })}
           placeholder="예: 수업료 60%, 부장 수당"
-          className="w-full border-none bg-transparent text-[14px] outline-none"
-          style={{ fontFamily: "inherit", color: "var(--aca-black)" }}
+          className="w-full border-none bg-transparent font-[inherit] text-[14px] text-[var(--aca-black)] outline-none"
         />
       </div>
       <label className="mt-1 flex cursor-pointer items-center gap-2">
@@ -570,7 +480,7 @@ function NamingStep({
           color="#2BB673"
           ariaLabel="세금 공제 대상"
         />
-        <span className="text-[12px]" style={{ color: "var(--aca-gray-700)" }}>
+        <span className="text-[12px] text-[var(--aca-gray-700)]">
           세금 공제 대상에 포함
         </span>
       </label>
@@ -675,36 +585,25 @@ function FormulaPreview({
   }
 
   return (
-    <div
-      className="flex flex-col gap-1.5 rounded-md p-3"
-      style={{
-        background: "var(--aca-gray-10)",
-        border: "1px solid var(--aca-gray-100)",
-      }}
-    >
-      <div
-        className="text-[11px] font-semibold"
-        style={{ color: "var(--aca-gray-500)" }}
-      >
+    <div className="flex flex-col gap-1.5 rounded-md border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)] p-3">
+      <div className="text-[11px] font-semibold text-[var(--aca-gray-500)]">
         미리보기
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px]" style={{ color: "var(--aca-gray-500)" }}>
+          <div className="text-[11px] text-[var(--aca-gray-500)]">
             베이스 = {baseStr}
           </div>
-          <div
-            className="jb2-mono mt-1 text-[12px]"
-            style={{ color: "var(--aca-gray-700)" }}
-          >
+          <div className="jb2-mono mt-1 text-[12px] text-[var(--aca-gray-700)]">
             {formulaExpr}
           </div>
         </div>
         <div
-          className="jb2-tnum shrink-0 text-[18px] font-bold"
-          style={{
-            color: cat === "minus" ? "var(--aca-red-primary)" : "var(--aca-black)",
-          }}
+          className={`jb2-tnum shrink-0 text-[18px] font-bold ${
+            cat === "minus"
+              ? "text-[var(--aca-red-primary)]"
+              : "text-[var(--aca-black)]"
+          }`}
         >
           {formatKRW(result)}
         </div>
@@ -1033,10 +932,7 @@ function AddItemModalInner({ entryMode }: InnerProps) {
           )}
         </div>
       ) : (
-        <div
-          className="py-8 text-center text-sm"
-          style={{ color: "var(--aca-gray-500)" }}
-        >
+        <div className="py-8 text-center text-sm text-[var(--aca-gray-500)]">
           강사가 선택되지 않았습니다.
         </div>
       )}
@@ -1046,12 +942,7 @@ function AddItemModalInner({ entryMode }: InnerProps) {
           <button
             type="button"
             onClick={handleResetCategory}
-            className="cursor-pointer rounded-md px-4 py-2 text-[13px] font-semibold"
-            style={{
-              background: "var(--aca-white)",
-              color: "var(--aca-gray-600)",
-              border: "1px solid var(--aca-gray-200)",
-            }}
+            className="cursor-pointer rounded-md border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-4 py-2 text-[13px] font-semibold text-[var(--aca-gray-600)]"
           >
             카테고리 변경
           </button>
@@ -1059,12 +950,7 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         <button
           type="button"
           onClick={closeModal}
-          className="cursor-pointer rounded-md px-4 py-2 text-[13px] font-semibold"
-          style={{
-            background: "var(--aca-white)",
-            color: "var(--aca-gray-600)",
-            border: "1px solid var(--aca-gray-200)",
-          }}
+          className="cursor-pointer rounded-md border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-4 py-2 text-[13px] font-semibold text-[var(--aca-gray-600)]"
         >
           취소
         </button>
@@ -1117,10 +1003,7 @@ export function AddItemModal() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="jb2-scope sm:max-w-[560px]"
-        style={{ background: "var(--aca-white)" }}
-      >
+      <DialogContent className="jb2-scope bg-[var(--aca-white)] sm:max-w-[560px]">
         {/*
           key로 entryMode를 지정해 "열릴 때마다 새 세션으로 초기화"를 보장한다.
           open이 false가 되면 Dialog 내부가 unmount되므로 내부 state도 자연스럽게 소멸.

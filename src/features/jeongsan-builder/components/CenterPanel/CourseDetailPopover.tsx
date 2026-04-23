@@ -44,8 +44,7 @@ export function CourseDetailPopover({
           <button
             type="button"
             {...props}
-            className="inline-flex cursor-pointer items-center gap-0.5 border-none bg-transparent p-0 text-[11px]"
-            style={{ color: "var(--aca-gray-400)" }}
+            className="inline-flex cursor-pointer items-center gap-0.5 border-none bg-transparent p-0 text-[11px] text-[var(--aca-gray-400)]"
           >
             {children}
           </button>
@@ -151,45 +150,27 @@ function BlockSection({ block }: { block: PayDocumentBlock }) {
   return (
     <div>
       <header className="mb-2">
-        <div className="text-[13.5px] font-bold" style={{ color: "var(--aca-black)" }}>
+        <div className="text-[13.5px] font-bold text-[var(--aca-black)]">
           {block.sueopName}
           {block.boonbanName && (
-            <span
-              className="ml-1 text-[11px] font-medium"
-              style={{ color: "var(--aca-gray-500)" }}
-            >
+            <span className="ml-1 text-[11px] font-medium text-[var(--aca-gray-500)]">
               · {block.boonbanName}
             </span>
           )}
           {block.statusText && (
-            <span
-              className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold"
-              style={{
-                background: "var(--aca-gray-50)",
-                color: "var(--aca-gray-600)",
-              }}
-            >
+            <span className="ml-1 rounded bg-[var(--aca-gray-50)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--aca-gray-600)]">
               {block.statusText}
             </span>
           )}
         </div>
         {block.scheduleText && (
-          <div
-            className="mt-0.5 text-[11px]"
-            style={{ color: "var(--aca-gray-500)" }}
-          >
+          <div className="mt-0.5 text-[11px] text-[var(--aca-gray-500)]">
             회차: {block.scheduleText}
           </div>
         )}
       </header>
 
-      <div
-        className="mb-3 grid grid-cols-4 gap-0 overflow-hidden rounded"
-        style={{
-          background: "var(--aca-gray-10)",
-          border: "1px solid var(--aca-gray-100)",
-        }}
-      >
+      <div className="mb-3 grid grid-cols-4 gap-0 overflow-hidden rounded border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)]">
         <MetricTile label="총 매출" value={formatKRW(totalRevenue)} />
         <MetricTile
           label="시수"
@@ -343,19 +324,12 @@ function MetricTile({
   valueSmall?: boolean;
 }) {
   return (
-    <div
-      className="flex flex-col gap-0.5 px-3 py-2"
-      style={{ borderRight: "1px solid var(--aca-gray-100)" }}
-    >
-      <div className="text-[10px]" style={{ color: "var(--aca-gray-500)" }}>
-        {label}
-      </div>
+    <div className="flex flex-col gap-0.5 border-r border-[var(--aca-gray-100)] px-3 py-2">
+      <div className="text-[10px] text-[var(--aca-gray-500)]">{label}</div>
       <div
-        className="jb2-tnum truncate font-semibold"
-        style={{
-          fontSize: valueSmall ? 11 : 13,
-          color: "var(--aca-black)",
-        }}
+        className={`jb2-tnum truncate font-semibold text-[var(--aca-black)] ${
+          valueSmall ? "text-[11px]" : "text-[13px]"
+        }`}
       >
         {value}
       </div>
@@ -372,32 +346,26 @@ function StudentTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div
-        className="py-3 text-center text-[11px]"
-        style={{ color: "var(--aca-gray-400)" }}
-      >
+      <div className="py-3 text-center text-[11px] text-[var(--aca-gray-400)]">
         학생 행이 없습니다.
       </div>
     );
   }
 
   return (
-    <div
-      className="overflow-hidden rounded"
-      style={{ border: "1px solid var(--aca-gray-100)" }}
-    >
+    <div className="overflow-hidden rounded border border-[var(--aca-gray-100)]">
       <table className="jb2-tnum w-full text-left text-[11.5px]">
         <colgroup>
-          <col style={{ minWidth: 110 }} />
-          <col style={{ minWidth: 70 }} />
-          <col style={{ minWidth: 100 }} />
-          <col style={{ minWidth: 100 }} />
-          <col style={{ minWidth: 80 }} />
-          <col style={{ minWidth: 100 }} />
-          <col style={{ minWidth: 110 }} />
+          <col className="min-w-[110px]" />
+          <col className="min-w-[70px]" />
+          <col className="min-w-[100px]" />
+          <col className="min-w-[100px]" />
+          <col className="min-w-[80px]" />
+          <col className="min-w-[100px]" />
+          <col className="min-w-[110px]" />
         </colgroup>
         <thead>
-          <tr style={{ background: "var(--aca-gray-10)" }}>
+          <tr className="bg-[var(--aca-gray-10)]">
             <Th>학생명</Th>
             <Th align="right">실강/콘</Th>
             <Th align="right">납부액</Th>
@@ -426,12 +394,9 @@ function Th({
 }) {
   return (
     <th
-      className="px-2 py-1.5 font-semibold"
-      style={{
-        color: "var(--aca-gray-600)",
-        textAlign: align ?? "left",
-        borderBottom: "1px solid var(--aca-gray-100)",
-      }}
+      className={`border-b border-[var(--aca-gray-100)] px-2 py-1.5 font-semibold text-[var(--aca-gray-600)] ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
     >
       {children}
     </th>
@@ -461,7 +426,7 @@ function StudentRow({
   const source = cell ? `${sheetName}:${cell.address}` : sheetName;
 
   return (
-    <tr style={{ borderBottom: "1px solid var(--aca-gray-100)" }}>
+    <tr className="border-b border-[var(--aca-gray-100)]">
       <Td>{row.sugangsaengName.value}</Td>
       <Td align="right">{quantityLabel}</Td>
       <Td align="right">{nabipAmount === null ? "-" : formatKRW(nabipAmount)}</Td>
@@ -469,10 +434,7 @@ function StudentRow({
       <Td>{gyeoljeSudan}</Td>
       <Td align="right">{formatKRW(payAmount)}</Td>
       <Td>
-        <span
-          className="jb2-mono text-[10.5px]"
-          style={{ color: "var(--aca-gray-500)" }}
-        >
+        <span className="jb2-mono text-[10.5px] text-[var(--aca-gray-500)]">
           {source}
         </span>
       </Td>
@@ -489,11 +451,9 @@ function Td({
 }) {
   return (
     <td
-      className="whitespace-nowrap px-2 py-1.5"
-      style={{
-        color: "var(--aca-black)",
-        textAlign: align ?? "left",
-      }}
+      className={`whitespace-nowrap px-2 py-1.5 text-[var(--aca-black)] ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
     >
       {children}
     </td>

@@ -168,8 +168,6 @@ export interface MonthlySummary {
   totalSettle: number;
   totalWithholding: number;
   totalPayout: number;
-  confirmedCount: number;
-  unconfirmedCount: number;
 }
 
 export interface CreateCalculatorOptions {
@@ -665,8 +663,6 @@ function computeMonthlySummary(
     totalSettle,
     totalWithholding,
     totalPayout,
-    confirmedCount: 0,
-    unconfirmedCount: teachers.length,
   };
 }
 

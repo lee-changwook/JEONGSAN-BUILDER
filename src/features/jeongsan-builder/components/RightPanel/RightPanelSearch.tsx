@@ -25,48 +25,38 @@ export function RightPanelSearch({
   onSortChange,
   disabled,
 }: RightPanelSearchProps) {
+  const sortActive = sortOrder !== "default";
   return (
-    <div className="flex gap-1.5" style={{ opacity: disabled ? 0.6 : 1 }}>
-      <div
-        className="flex h-8 flex-1 items-stretch overflow-hidden rounded-[4px]"
-        style={{
-          background: "var(--aca-white)",
-          border: "1px solid var(--aca-gray-200)",
-        }}
-      >
+    <div className={`flex gap-1.5 ${disabled ? "opacity-60" : "opacity-100"}`}>
+      <div className="flex h-8 flex-1 items-stretch overflow-hidden rounded-[4px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)]">
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="검색"
           disabled={disabled}
-          className="min-w-0 flex-1 border-none bg-transparent px-2.5 text-[13px] outline-none"
-          style={{ fontFamily: "inherit" }}
+          className="min-w-0 flex-1 border-none bg-transparent px-2.5 font-[inherit] text-[13px] outline-none"
         />
-        <div
-          className="flex items-center px-2.5"
-          style={{ color: "var(--aca-gray-400)" }}
-        >
+        <div className="flex items-center px-2.5 text-[var(--aca-gray-400)]">
           <SearchIcon className="size-3.5" />
         </div>
       </div>
 
       <div
-        className="relative flex h-8 shrink-0 items-center rounded-[4px]"
-        style={{
-          background: sortOrder !== "default" ? "var(--aca-blue-100)" : "var(--aca-white)",
-          border: `1px solid ${sortOrder !== "default" ? "var(--aca-blue-200)" : "var(--aca-gray-200)"}`,
-          opacity: disabled ? 0.6 : 1,
-        }}
+        className={`relative flex h-8 shrink-0 items-center rounded-[4px] border ${
+          sortActive
+            ? "border-[var(--aca-blue-200)] bg-[var(--aca-blue-100)]"
+            : "border-[var(--aca-gray-200)] bg-[var(--aca-white)]"
+        } ${disabled ? "opacity-60" : "opacity-100"}`}
       >
         <select
           value={sortOrder}
           onChange={(e) => onSortChange(e.target.value as SortOrder)}
           disabled={disabled}
-          className="h-full cursor-pointer appearance-none border-none bg-transparent py-0 pr-6 pl-2.5 text-xs font-semibold outline-none disabled:cursor-not-allowed"
-          style={{
-            fontFamily: "inherit",
-            color: sortOrder !== "default" ? "var(--aca-blue-primary)" : "var(--aca-gray-500)",
-          }}
+          className={`h-full cursor-pointer appearance-none border-none bg-transparent py-0 pr-6 pl-2.5 font-[inherit] text-xs font-semibold outline-none disabled:cursor-not-allowed ${
+            sortActive
+              ? "text-[var(--aca-blue-primary)]"
+              : "text-[var(--aca-gray-500)]"
+          }`}
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -75,10 +65,11 @@ export function RightPanelSearch({
           ))}
         </select>
         <ChevronDown
-          className="pointer-events-none absolute right-1.5 size-3"
-          style={{
-            color: sortOrder !== "default" ? "var(--aca-blue-primary)" : "var(--aca-gray-400)",
-          }}
+          className={`pointer-events-none absolute right-1.5 size-3 ${
+            sortActive
+              ? "text-[var(--aca-blue-primary)]"
+              : "text-[var(--aca-gray-400)]"
+          }`}
         />
       </div>
     </div>

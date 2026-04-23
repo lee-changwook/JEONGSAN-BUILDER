@@ -9,11 +9,11 @@ export function StepIndicator({ label, active, done }: StepIndicatorProps) {
   return (
     <div className="flex items-center gap-2.5">
       <div
-        className="flex size-6 shrink-0 items-center justify-center rounded-full border-[1.5px]"
-        style={{
-          background: filled ? "var(--aca-blue-primary)" : "var(--aca-white)",
-          borderColor: filled ? "var(--aca-blue-primary)" : "var(--aca-gray-200)",
-        }}
+        className={`flex size-6 shrink-0 items-center justify-center rounded-full border-[1.5px] ${
+          filled
+            ? "border-[var(--aca-blue-primary)] bg-[var(--aca-blue-primary)]"
+            : "border-[var(--aca-gray-200)] bg-[var(--aca-white)]"
+        }`}
       >
         {done && (
           <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
@@ -27,15 +27,15 @@ export function StepIndicator({ label, active, done }: StepIndicatorProps) {
           </svg>
         )}
         {active && !done && (
-          <div className="size-2 rounded-full" style={{ background: "var(--aca-white)" }} />
+          <div className="size-2 rounded-full bg-[var(--aca-white)]" />
         )}
       </div>
       <span
-        className="text-sm"
-        style={{
-          fontWeight: active ? 600 : 500,
-          color: active ? "var(--aca-black)" : "var(--aca-gray-400)",
-        }}
+        className={`text-sm ${
+          active
+            ? "font-semibold text-[var(--aca-black)]"
+            : "font-medium text-[var(--aca-gray-400)]"
+        }`}
       >
         {label}
       </span>
@@ -46,8 +46,9 @@ export function StepIndicator({ label, active, done }: StepIndicatorProps) {
 export function StepConnector({ done }: { done?: boolean }) {
   return (
     <div
-      className="ml-[11.5px] h-3.5 w-[1.5px]"
-      style={{ background: done ? "var(--aca-blue-primary)" : "var(--aca-gray-200)" }}
+      className={`ml-[11.5px] h-3.5 w-[1.5px] ${
+        done ? "bg-[var(--aca-blue-primary)]" : "bg-[var(--aca-gray-200)]"
+      }`}
     />
   );
 }
