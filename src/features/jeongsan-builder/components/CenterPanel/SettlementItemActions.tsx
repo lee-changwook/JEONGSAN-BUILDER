@@ -19,31 +19,18 @@ function ActionButton({
   onClick,
   disabled,
 }: ActionButtonProps) {
-  const palette =
+  const paletteClass =
     variant === "primary"
-      ? {
-          background: "var(--aca-black)",
-          color: "var(--aca-white)",
-          border: "none",
-        }
+      ? "border-none bg-[var(--aca-black)] text-[var(--aca-white)]"
       : variant === "danger"
-        ? {
-            background: "var(--aca-white)",
-            color: "var(--aca-red-primary)",
-            border: "1px solid var(--aca-red-40)",
-          }
-        : {
-            background: "var(--aca-white)",
-            color: "var(--aca-gray-700)",
-            border: "1px solid var(--aca-gray-200)",
-          };
+        ? "border border-[var(--aca-red-40)] bg-[var(--aca-white)] text-[var(--aca-red-primary)]"
+        : "border border-[var(--aca-gray-200)] bg-[var(--aca-white)] text-[var(--aca-gray-700)]";
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex h-[38px] cursor-pointer items-center gap-1.5 rounded-md px-3.5 text-[14px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-      style={palette}
+      className={`flex h-[38px] cursor-pointer items-center gap-1.5 rounded-md px-3.5 text-[14px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${paletteClass}`}
     >
       {icon}
       {label}
@@ -74,23 +61,14 @@ export function SettlementItemActions() {
   }
 
   return (
-    <div
-      className="flex items-center gap-2 px-5 py-4"
-      style={{
-        background: "var(--aca-white)",
-        borderTop: "1px solid var(--aca-gray-100)",
-      }}
-    >
+    <div className="flex items-center gap-2 border-t border-[var(--aca-gray-100)] bg-[var(--aca-white)] px-5 py-4">
       <ActionButton
         icon={<Sparkles className="size-3.5" />}
         label="항목 추가"
         variant="primary"
         onClick={() => openAddItemModal("unspecified")}
       />
-      <div
-        className="mx-1 h-5"
-        style={{ borderLeft: "1px solid var(--aca-gray-100)" }}
-      />
+      <div className="mx-1 h-5 border-l border-[var(--aca-gray-100)]" />
       <ActionButton
         icon={<Upload className="size-3.5" />}
         label="수업 기반"

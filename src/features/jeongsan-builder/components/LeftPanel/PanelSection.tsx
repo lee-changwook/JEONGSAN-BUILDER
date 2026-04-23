@@ -10,25 +10,17 @@ interface PanelSectionProps {
 export function PanelSection({ title, subtitle, muted, children }: PanelSectionProps) {
   return (
     <div
-      className="rounded-md"
-      style={{
-        background: muted ? "transparent" : "var(--aca-white)",
-        border: muted ? "none" : "1px solid var(--aca-gray-100)",
-        padding: muted ? 0 : 16,
-        opacity: muted ? 0.55 : 1,
-      }}
+      className={`rounded-md ${
+        muted
+          ? "bg-transparent p-0 opacity-55"
+          : "border border-[var(--aca-gray-100)] bg-[var(--aca-white)] p-4 opacity-100"
+      }`}
     >
-      <div
-        className="mb-1 text-[15px] font-bold"
-        style={{ color: "var(--aca-black)" }}
-      >
+      <div className="mb-1 text-[15px] font-bold text-[var(--aca-black)]">
         {title}
       </div>
       {subtitle && (
-        <div
-          className="mb-3.5 text-xs leading-[1.55]"
-          style={{ color: "var(--aca-gray-500)" }}
-        >
+        <div className="mb-3.5 text-xs leading-[1.55] text-[var(--aca-gray-500)]">
           {subtitle}
         </div>
       )}

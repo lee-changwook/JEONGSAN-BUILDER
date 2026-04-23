@@ -6,10 +6,7 @@ import { SummaryBar } from "@/features/jeongsan-builder/components/CenterPanel/S
 
 export function CenterPanelFilled() {
   return (
-    <div
-      className="flex min-w-0 flex-1 flex-col"
-      style={{ background: "var(--aca-white)" }}
-    >
+    <div className="flex min-w-0 flex-1 flex-col bg-[var(--aca-white)]">
       <SummaryBar />
       <InstructorCardHeader />
       <SettlementItemTable />

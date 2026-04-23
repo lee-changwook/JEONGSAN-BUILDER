@@ -70,13 +70,7 @@ export function LeftPanel() {
   const hasFile = selectedFileName !== null;
 
   return (
-    <div
-      className="flex h-full w-[380px] shrink-0 flex-col"
-      style={{
-        background: "var(--aca-white)",
-        borderRight: "1px solid var(--aca-gray-100)",
-      }}
-    >
+    <div className="flex h-full w-[380px] shrink-0 flex-col border-r border-[var(--aca-gray-100)] bg-[var(--aca-white)]">
       <input
         ref={fileInputRef}
         type="file"
@@ -90,13 +84,10 @@ export function LeftPanel() {
       />
 
       <div className="px-6 pt-[22px] pb-4">
-        <div
-          className="text-xl font-bold tracking-[-0.2px]"
-          style={{ color: "var(--aca-black)" }}
-        >
+        <div className="text-xl font-bold tracking-[-0.2px] text-[var(--aca-black)]">
           정산 빌더
         </div>
-        <div className="mt-0.5 text-xs" style={{ color: "var(--aca-gray-500)" }}>
+        <div className="mt-0.5 text-xs text-[var(--aca-gray-500)]">
           페이 문서를 업로드하고 월간 정산 데이터를 생성합니다
         </div>
       </div>
@@ -135,31 +126,16 @@ export function LeftPanel() {
             </div>
 
             {hasFile ? (
-              <div
-                className="flex items-center gap-2.5 rounded-md px-3 py-2.5"
-                style={{
-                  border: "1px solid var(--aca-gray-100)",
-                  background: "var(--aca-gray-10)",
-                }}
-              >
-                <div
-                  className="flex size-7 items-center justify-center rounded"
-                  style={{
-                    background: "var(--aca-green-light)",
-                    color: "var(--aca-green)",
-                  }}
-                >
+              <div className="flex items-center gap-2.5 rounded-md border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)] px-3 py-2.5">
+                <div className="flex size-7 items-center justify-center rounded bg-[var(--aca-green-light)] text-[var(--aca-green)]">
                   <FileIcon className="size-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div
-                    className="truncate text-[13px] font-semibold"
-                    style={{ color: "var(--aca-black)" }}
-                  >
+                  <div className="truncate text-[13px] font-semibold text-[var(--aca-black)]">
                     {selectedFileName}
                   </div>
                   {payFile && (
-                    <div className="text-[11px]" style={{ color: "var(--aca-gray-400)" }}>
+                    <div className="text-[11px] text-[var(--aca-gray-400)]">
                       {payFile.periodLabel} · {payFile.teacherCount}명
                     </div>
                   )}
@@ -167,8 +143,7 @@ export function LeftPanel() {
                 <button
                   type="button"
                   onClick={removePayFile}
-                  className="flex cursor-pointer border-none bg-transparent p-1"
-                  style={{ color: "var(--aca-gray-400)" }}
+                  className="flex cursor-pointer border-none bg-transparent p-1 text-[var(--aca-gray-400)]"
                   aria-label="파일 제거"
                 >
                   <X className="size-3.5" />
@@ -178,36 +153,16 @@ export function LeftPanel() {
               <>
                 <DropZone onClick={triggerFilePick} />
                 {isParsing ? (
-                  <div
-                    className="mt-2.5 rounded-md px-3 py-2.5 text-xs"
-                    style={{
-                      border: "1px solid var(--aca-blue-200)",
-                      color: "var(--aca-blue-primary)",
-                      background: "var(--aca-blue-10)",
-                    }}
-                  >
+                  <div className="mt-2.5 rounded-md border border-[var(--aca-blue-200)] bg-[var(--aca-blue-10)] px-3 py-2.5 text-xs text-[var(--aca-blue-primary)]">
                     페이 문서를 분석하는 중...
                   </div>
                 ) : parseError ? (
-                  <div
-                    className="mt-2.5 flex items-start gap-2 rounded-md px-3 py-2.5 text-xs"
-                    style={{
-                      border: "1px solid var(--aca-red-40)",
-                      color: "var(--aca-red-primary)",
-                      background: "var(--aca-red-10)",
-                    }}
-                  >
+                  <div className="mt-2.5 flex items-start gap-2 rounded-md border border-[var(--aca-red-40)] bg-[var(--aca-red-10)] px-3 py-2.5 text-xs text-[var(--aca-red-primary)]">
                     <AlertTriangle className="mt-[1px] size-3.5 shrink-0" />
                     <span className="leading-[1.55]">{parseError}</span>
                   </div>
                 ) : (
-                  <div
-                    className="mt-2.5 rounded-md px-3 py-2.5 text-xs"
-                    style={{
-                      border: "1px solid var(--aca-gray-100)",
-                      color: "var(--aca-gray-400)",
-                    }}
-                  >
+                  <div className="mt-2.5 rounded-md border border-[var(--aca-gray-100)] px-3 py-2.5 text-xs text-[var(--aca-gray-400)]">
                     아직 업로드된 페이 문서가 없습니다.
                   </div>
                 )}
@@ -227,41 +182,22 @@ export function LeftPanel() {
             muted={!uploaded}
           >
             {prevPayoutFile ? (
-              <div
-                className="flex items-center gap-2.5 rounded-md px-3 py-2.5"
-                style={{
-                  border: "1px solid var(--aca-gray-100)",
-                  background: "var(--aca-gray-10)",
-                }}
-              >
-                <div
-                  className="flex size-7 items-center justify-center rounded"
-                  style={{
-                    background: "var(--aca-green-light)",
-                    color: "var(--aca-green)",
-                  }}
-                >
+              <div className="flex items-center gap-2.5 rounded-md border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)] px-3 py-2.5">
+                <div className="flex size-7 items-center justify-center rounded bg-[var(--aca-green-light)] text-[var(--aca-green)]">
                   <FileIcon className="size-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div
-                    className="truncate text-[13px] font-semibold"
-                    style={{ color: "var(--aca-black)" }}
-                  >
+                  <div className="truncate text-[13px] font-semibold text-[var(--aca-black)]">
                     {prevPayoutFile.name}
                   </div>
-                  <div
-                    className="text-[11px]"
-                    style={{ color: "var(--aca-gray-400)" }}
-                  >
+                  <div className="text-[11px] text-[var(--aca-gray-400)]">
                     {prevPayoutFile.periodLabel}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={removePrevPayoutFile}
-                  className="flex cursor-pointer border-none bg-transparent p-1"
-                  style={{ color: "var(--aca-gray-400)" }}
+                  className="flex cursor-pointer border-none bg-transparent p-1 text-[var(--aca-gray-400)]"
                   aria-label="파일 제거"
                 >
                   <X className="size-3.5" />
@@ -282,12 +218,7 @@ export function LeftPanel() {
         <button
           type="button"
           onClick={resetAll}
-          className="h-[38px] shrink-0 cursor-pointer rounded-md px-3.5 text-[14px] font-semibold"
-          style={{
-            background: "var(--aca-white)",
-            color: "var(--aca-gray-500)",
-            border: "1px solid var(--aca-gray-200)",
-          }}
+          className="h-[38px] shrink-0 cursor-pointer rounded-md border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-3.5 text-[14px] font-semibold text-[var(--aca-gray-500)]"
         >
           초기화
         </button>
@@ -295,12 +226,7 @@ export function LeftPanel() {
           <button
             type="button"
             onClick={triggerFilePick}
-            className="h-[38px] flex-1 cursor-pointer rounded-md px-3.5 text-[14px] font-semibold"
-            style={{
-              background: "var(--aca-white)",
-              color: "var(--aca-gray-600)",
-              border: "1px solid var(--aca-gray-200)",
-            }}
+            className="h-[38px] flex-1 cursor-pointer rounded-md border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-3.5 text-[14px] font-semibold text-[var(--aca-gray-600)]"
           >
             다른 파일 선택
           </button>
@@ -309,12 +235,7 @@ export function LeftPanel() {
             type="button"
             disabled={!pendingFile || isParsing}
             onClick={pendingFile ? () => void runBuild() : triggerFilePick}
-            className="h-[38px] flex-1 cursor-pointer rounded-md px-3.5 text-[14px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              background: "var(--aca-black)",
-              color: "var(--aca-white)",
-              border: "none",
-            }}
+            className="h-[38px] flex-1 cursor-pointer rounded-md border-none bg-[var(--aca-black)] px-3.5 text-[14px] font-semibold text-[var(--aca-white)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isParsing ? "분석 중..." : pendingFile ? "정산 데이터 만들기" : "정산 데이터 만들기"}
           </button>

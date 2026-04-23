@@ -49,20 +49,18 @@ export function MiniInput({
     }
   }
 
-  const baseBorder = draft ? "var(--aca-gray-300)" : "var(--aca-gray-200)";
+  const borderClass = draft
+    ? "border-[var(--aca-gray-300)]"
+    : "border-[var(--aca-gray-200)]";
+  const selectedClass = cellSelected
+    ? "shadow-[inset_0_0_0_2px_var(--aca-blue-primary)]"
+    : "";
 
   return (
     <div
-      className="flex h-7 items-center rounded-[4px] px-2"
+      className={`flex h-7 items-center rounded-[4px] border bg-[var(--aca-white)] px-2 ${borderClass} ${selectedClass}`}
       data-cell-id={cellId}
       data-cell-col={cellCol}
-      style={{
-        background: "var(--aca-white)",
-        border: `1px solid ${baseBorder}`,
-        boxShadow: cellSelected
-          ? "inset 0 0 0 2px var(--aca-blue-primary)"
-          : undefined,
-      }}
     >
       <input
         value={draft}
@@ -85,12 +83,9 @@ export function MiniInput({
           }
         }}
         inputMode="decimal"
-        className="w-full min-w-0 border-none bg-transparent p-0 text-xs outline-none"
-        style={{
-          color: "var(--aca-black)",
-          textAlign: align,
-          fontFamily: "inherit",
-        }}
+        className={`w-full min-w-0 border-none bg-transparent p-0 font-[inherit] text-xs text-[var(--aca-black)] outline-none ${
+          align === "right" ? "text-right" : "text-left"
+        }`}
       />
     </div>
   );

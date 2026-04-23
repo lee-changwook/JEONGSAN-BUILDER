@@ -10,10 +10,7 @@ export function BuilderView() {
   const ready = useBuilderStore((s) => s.calculator !== null);
 
   return (
-    <div
-      className="jb2-scope flex h-screen w-full overflow-hidden"
-      style={{ background: "var(--aca-gray-10)", color: "var(--aca-black)" }}
-    >
+    <div className="jb2-scope flex h-screen w-full overflow-hidden bg-[var(--aca-gray-10)] text-[var(--aca-black)]">
       <LeftPanel />
       {ready ? <CenterPanelFilled /> : <CenterEmpty />}
       <RightPanel empty={!ready} />
