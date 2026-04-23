@@ -5,6 +5,9 @@ import { Popover } from "@base-ui/react/popover";
 
 import {
   formatKRW,
+  isSyntheticClassId,
+  type ClassItem,
+  type LinkedMinapHoesuRow,
   type SettlementCalculator,
 } from "@/features/jeongsan-builder/calculator";
 import type {
@@ -13,6 +16,7 @@ import type {
 } from "@/features/jeongsan-builder/parser";
 
 interface CourseDetailPopoverProps {
+  teacherId: string;
   classIds: string[];
   calculator: SettlementCalculator;
   children: ReactNode;
@@ -20,16 +24,18 @@ interface CourseDetailPopoverProps {
 
 /**
  * "상세" 버튼 클릭 시 팝오버로 강좌 상세 정보를 표시한다.
- * - 모든 회차 날짜 / 총 매출 / 시수 / 학생 수 / 학생 정보 테이블
- *
- * 선택된 수업(classIds)이 여러 개면 각 블록을 나열한다.
+ * 실제 수업은 블록 기반 정보를 노출하고, synthetic(미납회수 전용) 수업은
+ * 연결된 미납회수 내역만 표시한다. 두 경우 모두 하단에 연결 미납회수 rows를 덧붙인다.
  */
 export function CourseDetailPopover({
+  teacherId,
   classIds,
   calculator,
   children,
 }: CourseDetailPopoverProps) {
-  const blocks = calculator.getBlocksByClassIds(classIds);
+  const classes = classIds
+    .map((cid) => calculator.getClass(teacherId, cid))
+    .filter((c): c is ClassItem => Boolean(c));
 
   return (
     <Popover.Root>
@@ -56,14 +62,18 @@ export function CourseDetailPopover({
               color: "var(--aca-black)",
             }}
           >
-            {blocks.length === 0 ? (
+            {classes.length === 0 ? (
               <div className="py-6 text-center text-xs" style={{ color: "var(--aca-gray-400)" }}>
                 선택된 수업이 없습니다.
               </div>
             ) : (
               <div className="flex flex-col gap-4">
-                {blocks.map((block) => (
-                  <BlockSection key={block.id} block={block} />
+                {classes.map((cls) => (
+                  <ClassSection
+                    key={cls.id}
+                    cls={cls}
+                    calculator={calculator}
+                  />
                 ))}
               </div>
             )}
@@ -74,6 +84,64 @@ export function CourseDetailPopover({
   );
 }
 
+function ClassSection({
+  cls,
+  calculator,
+}: {
+  cls: ClassItem;
+  calculator: SettlementCalculator;
+}) {
+  const linkedRows = calculator.getLinkedMinapHoesuRows(cls.id);
+  const isSynthetic = isSyntheticClassId(cls.id);
+  const block = isSynthetic ? null : calculator.getBlock(cls.id);
+
+  return (
+    <section className="flex flex-col gap-3">
+      {block ? (
+        <BlockSection block={block} />
+      ) : (
+        <SyntheticClassHeader cls={cls} />
+      )}
+      {linkedRows.length > 0 && <LinkedMinapHoesuSection rows={linkedRows} />}
+    </section>
+  );
+}
+
+function SyntheticClassHeader({ cls }: { cls: ClassItem }) {
+  return (
+    <header>
+      <div
+        className="flex items-center gap-1.5 text-[13.5px] font-bold"
+        style={{ color: "var(--aca-black)" }}
+      >
+        <span>{cls.name}</span>
+        <span
+          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+          style={{
+            background: "var(--aca-yellow-10)",
+            color: "var(--aca-yellow-primary)",
+          }}
+          title="수업 블록이 없고 미납회수 데이터에서 참조된 수업"
+        >
+          미납회수 전용
+        </span>
+      </div>
+      <div
+        className="mt-0.5 text-[11px]"
+        style={{ color: "var(--aca-gray-500)" }}
+      >
+        당월 매출 블록 없음 · 전월 미납 회수 잔액{" "}
+        <span
+          className="jb2-tnum font-semibold"
+          style={{ color: "var(--aca-red-primary)" }}
+        >
+          {formatKRW(cls.hoesu.minapTotal)}
+        </span>
+      </div>
+    </header>
+  );
+}
+
 function BlockSection({ block }: { block: PayDocumentBlock }) {
   const totalRevenue = block.totals.nabipTotal;
   const studentRows = block.rows.filter(
@@ -81,7 +149,7 @@ function BlockSection({ block }: { block: PayDocumentBlock }) {
   );
 
   return (
-    <section>
+    <div>
       <header className="mb-2">
         <div className="text-[13.5px] font-bold" style={{ color: "var(--aca-black)" }}>
           {block.sueopName}
@@ -136,7 +204,132 @@ function BlockSection({ block }: { block: PayDocumentBlock }) {
       </div>
 
       <StudentTable rows={studentRows} sheetName={block.sheetName} />
-    </section>
+    </div>
+  );
+}
+
+/**
+ * 수업에 연결된 전월 미납회수(minap_hoesu) student row 목록을 테이블로 표시.
+ */
+function LinkedMinapHoesuSection({ rows }: { rows: LinkedMinapHoesuRow[] }) {
+  const hoesuTotal = rows.reduce((s, r) => s + r.row.hoesuAmount.value, 0);
+  const minapTotal = rows.reduce((s, r) => s + r.row.minapAmount.value, 0);
+  const payTotal = rows.reduce((s, r) => s + r.row.payAmount.value, 0);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <div
+          className="text-[12px] font-semibold"
+          style={{ color: "var(--aca-gray-600)" }}
+        >
+          전월 미납회수 내역{" "}
+          <span
+            className="ml-1 text-[11px] font-normal"
+            style={{ color: "var(--aca-gray-500)" }}
+          >
+            · {rows.length}건
+          </span>
+        </div>
+        <div
+          className="jb2-tnum text-[11px]"
+          style={{ color: "var(--aca-gray-500)" }}
+        >
+          회수 {formatKRW(hoesuTotal)} · 미회수{" "}
+          <span style={{ color: "var(--aca-red-primary)" }}>
+            {formatKRW(minapTotal)}
+          </span>{" "}
+          · PAY{" "}
+          <span style={{ color: "var(--aca-blue-primary)" }}>
+            {formatKRW(payTotal)}
+          </span>
+        </div>
+      </div>
+      <div
+        className="overflow-hidden rounded"
+        style={{ border: "1px solid var(--aca-gray-100)" }}
+      >
+        <table className="jb2-tnum w-full text-left text-[11.5px]">
+          <colgroup>
+            <col style={{ minWidth: 110 }} />
+            <col style={{ minWidth: 140 }} />
+            <col style={{ minWidth: 90 }} />
+            <col style={{ minWidth: 90 }} />
+            <col style={{ minWidth: 90 }} />
+            <col style={{ minWidth: 110 }} />
+          </colgroup>
+          <thead>
+            <tr style={{ background: "var(--aca-gray-10)" }}>
+              <Th>학생명</Th>
+              <Th>연결 수업명 (원문)</Th>
+              <Th align="right">회수</Th>
+              <Th align="right">미회수</Th>
+              <Th align="right">PAY</Th>
+              <Th>출처</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ row, sourceBlock }) => {
+              const source = row.sugangsaengName.cell
+                ? `${sourceBlock.sheetName}:${row.sugangsaengName.cell.address}`
+                : sourceBlock.sheetName;
+              return (
+                <tr
+                  key={row.id}
+                  style={{ borderBottom: "1px solid var(--aca-gray-100)" }}
+                >
+                  <Td>{row.sugangsaengName.value}</Td>
+                  <Td>
+                    <span style={{ color: "var(--aca-gray-600)" }}>
+                      {row.linkedSueopName.value || "—"}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    {row.hoesuAmount.value === 0
+                      ? "-"
+                      : formatKRW(row.hoesuAmount.value)}
+                  </Td>
+                  <Td align="right">
+                    <span
+                      style={{
+                        color:
+                          row.minapAmount.value === 0
+                            ? "var(--aca-gray-400)"
+                            : "var(--aca-red-primary)",
+                      }}
+                    >
+                      {row.minapAmount.value === 0
+                        ? "-"
+                        : formatKRW(row.minapAmount.value)}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <span
+                      style={{
+                        color:
+                          row.payAmount.value === 0
+                            ? "var(--aca-gray-400)"
+                            : "var(--aca-blue-primary)",
+                      }}
+                    >
+                      {formatKRW(row.payAmount.value)}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span
+                      className="jb2-mono text-[10.5px]"
+                      style={{ color: "var(--aca-gray-500)" }}
+                    >
+                      {source}
+                    </span>
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

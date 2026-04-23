@@ -13,6 +13,7 @@ import {
 import { MiniCheckbox } from "@/features/jeongsan-builder/components/MiniControls";
 import {
   formatKRW,
+  isSyntheticClassId,
   type BaseId,
   type CategoryId,
   type ClassItem,
@@ -50,6 +51,11 @@ const REVENUE_BASE_OPTIONS: Array<{ id: BaseId; label: string; hint: string }> =
   { id: "hours", label: "시수", hint: "수업 시간" },
   { id: "students", label: "학생 수", hint: "등록 학생 수" },
   { id: "unpaidShare", label: "미납금", hint: "미납액 합" },
+  {
+    id: "currentUnpaidNeg",
+    label: "현재 미납금액 (-)",
+    hint: "당월 미납 + 전월 미회수를 음수로",
+  },
   { id: "direct", label: "직접 입력", hint: "금액을 직접 입력" },
 ];
 
@@ -249,6 +255,7 @@ function CourseSelector({
           filtered.map((c) => {
             const checked = state.classIds.has(c.id);
             const alreadyUsed = usedClassIds.has(c.id);
+            const isSynthetic = isSyntheticClassId(c.id);
             return (
               <div
                 key={c.id}
@@ -283,6 +290,18 @@ function CourseSelector({
                         </span>
                       )}
                     </span>
+                    {isSynthetic && (
+                      <span
+                        className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
+                        style={{
+                          background: "var(--aca-yellow-10)",
+                          color: "var(--aca-yellow-primary)",
+                        }}
+                        title="수업 블록이 없고 미납회수 데이터에서 참조된 수업"
+                      >
+                        미납회수 전용
+                      </span>
+                    )}
                     {alreadyUsed && (
                       <span
                         className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
@@ -297,7 +316,9 @@ function CourseSelector({
                     )}
                   </div>
                   <div className="text-[11px]" style={{ color: "var(--aca-gray-500)" }}>
-                    {c.students}명 · 순매출 {formatKRW(c.revenueNet)}
+                    {isSynthetic
+                      ? `전월 미회수 ${formatKRW(c.hoesu.minapTotal)}`
+                      : `${c.students}명 · 순매출 ${formatKRW(c.revenueNet)}`}
                   </div>
                 </div>
               </div>
@@ -339,6 +360,7 @@ function BaseValuePicker({
     hours: agg.hours,
     students: agg.students,
     unpaidShare: agg.unpaid,
+    currentUnpaidNeg: -(agg.unpaid + agg.hoesu.minapTotal),
     direct: directBaseVal,
   };
 
@@ -583,6 +605,8 @@ function computeBaseVal(
         return agg.students;
       case "unpaidShare":
         return agg.unpaid;
+      case "currentUnpaidNeg":
+        return -(agg.unpaid + agg.hoesu.minapTotal);
     }
   }
   return Number(state.customBase) || 0;

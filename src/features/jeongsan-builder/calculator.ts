@@ -20,6 +20,7 @@
 import type {
   PayDocumentBlock,
   PayDocumentParseResult,
+  PayDocumentRow,
 } from "@/features/jeongsan-builder/parser";
 
 // ============================================================================
@@ -109,7 +110,17 @@ export type BaseId =
   | "hours"
   | "students"
   | "unpaidShare"
+  | "currentUnpaidNeg"
   | "direct";
+
+/**
+ * 미납회수 student row와 그것이 속한 block 참조. `getLinkedMinapHoesuRows`가 반환.
+ * popover에서 "이 수업에 연결된 전월 미납회수 내역" 표시에 사용.
+ */
+export interface LinkedMinapHoesuRow {
+  row: Extract<PayDocumentRow, { rowKind: "minap_hoesu_student" }>;
+  sourceBlock: PayDocumentBlock;
+}
 
 export type OpId = "rate" | "fixed" | "multiply" | "add" | "custom";
 
@@ -244,11 +255,27 @@ function inferSubjectLabel(blocks: PayDocumentBlock[]): string {
   return head || name.slice(0, 6);
 }
 
+/**
+ * 매칭되지 않은 linkedSueopName에 대해 생성되는 synthetic ClassItem의 ID prefix.
+ * 실제 블록 기반 id (`${sheetName}-${row}-${col}`)와 구분된다.
+ */
+const SYNTHETIC_CLASS_PREFIX = "syn:";
+
+function syntheticClassId(teacherId: string, normalized: string): string {
+  return `${SYNTHETIC_CLASS_PREFIX}${teacherId}:${normalized}`;
+}
+
+export function isSyntheticClassId(classId: string): boolean {
+  return classId.startsWith(SYNTHETIC_CLASS_PREFIX);
+}
+
 function buildTeachersAndClasses(
   parseResult: PayDocumentParseResult,
 ): {
   teachers: Teacher[];
   classesByTeacher: Map<string, ClassItem[]>;
+  /** classId → 해당 수업에 연결된 minap_hoesu student row 목록 (real + synthetic 모두 포함). */
+  linkedRowsByClass: Map<string, LinkedMinapHoesuRow[]>;
 } {
   // Pass 1: 일반(수업/보충) 블록을 강사별로 묶는다.
   const blocksByTeacher = new Map<string, PayDocumentBlock[]>();
@@ -278,6 +305,7 @@ function buildTeachersAndClasses(
 
   const teachers: Teacher[] = [];
   const classesByTeacher = new Map<string, ClassItem[]>();
+  const linkedRowsByClass = new Map<string, LinkedMinapHoesuRow[]>();
 
   for (const [teacherName, blocks] of blocksByTeacher) {
     const teacherId = teacherIdOf(teacherName);
@@ -293,40 +321,101 @@ function buildTeachersAndClasses(
     classesByTeacher.set(teacherId, classItems);
   }
 
+  function pushLinkedRow(
+    classId: string,
+    row: Extract<PayDocumentRow, { rowKind: "minap_hoesu_student" }>,
+    sourceBlock: PayDocumentBlock,
+  ) {
+    const existing = linkedRowsByClass.get(classId);
+    if (existing) existing.push({ row, sourceBlock });
+    else linkedRowsByClass.set(classId, [{ row, sourceBlock }]);
+  }
+
   // Pass 2: 미납회수 시트의 각 student row를 linkedSueopName으로 강좌에 매핑해
-  //        해당 강좌의 hoesu 통계에 누적한다. 매칭 실패한 row는 console.warn으로
-  //        알리고 반영하지 않는다(강좌 불명확한 회수는 정산에 귀속시키지 않음).
+  //        해당 강좌의 hoesu 통계에 누적한다. 매칭 실패한 경우에는
+  //        synthetic 수업(미납만 있는 가상 수업)을 강사 아래에 생성해 귀속시킨다.
   for (const [teacherName, mhBlocks] of minapHoesuBlocksByTeacher) {
     const teacherId = teacherIdOf(teacherName);
-    const classes = classesByTeacher.get(teacherId);
-    if (!classes || classes.length === 0) {
-      // 강좌가 하나도 없는 강사(미납회수만 있는 경우)는 매핑할 대상이 없으므로 스킵.
-      continue;
+
+    // 강사 리스트에 아직 없으면 신규로 추가 (수업 블록이 없는 강사에 미납회수만 있는 경우).
+    let classes = classesByTeacher.get(teacherId);
+    if (!classes) {
+      teachers.push({
+        id: teacherId,
+        name: teacherName,
+        subjectLabel: "",
+        classIds: [],
+      });
+      classes = [];
+      classesByTeacher.set(teacherId, classes);
     }
+    let teacher = teachers.find((t) => t.id === teacherId);
+    if (!teacher) {
+      teacher = {
+        id: teacherId,
+        name: teacherName,
+        subjectLabel: "",
+        classIds: [],
+      };
+      teachers.push(teacher);
+    }
+
+    const syntheticByKey = new Map<string, ClassItem>();
 
     for (const block of mhBlocks) {
       for (const row of block.rows) {
         if (row.rowKind !== "minap_hoesu_student") continue;
         const linkedName = row.linkedSueopName.value.trim();
         const matched = findClassByLinkedName(classes, linkedName);
-        if (!matched) {
-          if (typeof console !== "undefined" && linkedName) {
+
+        const target: ClassItem | null = (() => {
+          if (matched) return matched;
+          if (!linkedName) return null;
+          const key = normalizeCourseName(linkedName);
+          if (!key) return null;
+          const existing = syntheticByKey.get(key);
+          if (existing) return existing;
+          const synth: ClassItem = {
+            id: syntheticClassId(teacherId, key),
+            teacherId,
+            name: linkedName,
+            section: null,
+            description: "미납회수 전용 (수업 데이터 없음)",
+            statusText: null,
+            students: 0,
+            hours: 0,
+            revenueVAT: 0,
+            revenueNet: 0,
+            unpaid: 0,
+            pay: 0,
+            hoesu: { hoesuTotal: 0, minapTotal: 0, payTotal: 0 },
+          };
+          syntheticByKey.set(key, synth);
+          classes.push(synth);
+          teacher.classIds.push(synth.id);
+          return synth;
+        })();
+
+        if (!target) {
+          if (typeof console !== "undefined") {
             console.warn(
-              `[정산빌더] 미납회수 row의 연결 수업 매칭 실패: teacher="${teacherName}", linked="${linkedName}"`,
+              `[정산빌더] 미납회수 row에 연결 수업명이 없어 누락: teacher="${teacherName}"`,
             );
           }
           continue;
         }
-        matched.hoesu = {
-          hoesuTotal: matched.hoesu.hoesuTotal + row.hoesuAmount.value,
-          minapTotal: matched.hoesu.minapTotal + row.minapAmount.value,
-          payTotal: matched.hoesu.payTotal + row.payAmount.value,
+
+        target.hoesu = {
+          hoesuTotal: target.hoesu.hoesuTotal + row.hoesuAmount.value,
+          minapTotal: target.hoesu.minapTotal + row.minapAmount.value,
+          payTotal: target.hoesu.payTotal + row.payAmount.value,
         };
+        pushLinkedRow(target.id, row, block);
       }
     }
   }
 
-  return { teachers, classesByTeacher };
+  return { teachers, classesByTeacher, linkedRowsByClass };
 }
 
 // ============================================================================
@@ -375,6 +464,11 @@ function baseValueFromAgg(base: BaseId, agg: ClassAggregate): number {
       return agg.students;
     case "unpaidShare":
       return agg.unpaid;
+    case "currentUnpaidNeg":
+      // 현재 미납금액(-): 당월 미납(agg.unpaid) + 전월 미납 중 아직 회수되지 않은 잔액
+      // (agg.hoesu.minapTotal)의 합에 음수 부호를 붙여 반환. 주로 synthetic 수업에서
+      // "미회수 금액을 월급에서 차감"하는 용도로 쓴다.
+      return -(agg.unpaid + agg.hoesu.minapTotal);
     case "direct":
       // 직접 입력 베이스는 rule.customBase를 사용한다. computeRule에서 별도 처리.
       return 0;
@@ -596,6 +690,8 @@ export interface SettlementCalculator {
   // 원본 블록 조회 (수업 상세 툴팁 등에서 학생 행까지 필요할 때)
   getBlock(blockId: string): PayDocumentBlock | null;
   getBlocksByClassIds(classIds: string[]): PayDocumentBlock[];
+  /** 해당 수업(실/합성)에 연결된 전월 미납회수 student row 목록. */
+  getLinkedMinapHoesuRows(classId: string): LinkedMinapHoesuRow[];
 
   // 규칙
   getRules(teacherId: string): RuleItem[];
@@ -644,12 +740,17 @@ export function createCalculator(
   parseResult: PayDocumentParseResult,
   options?: CreateCalculatorOptions,
 ): SettlementCalculator {
-  const { teachers, classesByTeacher } = buildTeachersAndClasses(parseResult);
+  const { teachers, classesByTeacher, linkedRowsByClass } =
+    buildTeachersAndClasses(parseResult);
 
   const rulesByTeacher: Record<string, RuleItem[]> =
     options?.initialRules ??
     teachers.reduce<Record<string, RuleItem[]>>((acc, teacher) => {
-      acc[teacher.id] = seedRulesForTeacher(classesByTeacher.get(teacher.id) ?? []);
+      // synthetic 수업은 매출 0이라 seed rule(revenueNet × 0.6)을 만들어도 의미가 없어 제외.
+      const seedable = (classesByTeacher.get(teacher.id) ?? []).filter(
+        (c) => !isSyntheticClassId(c.id),
+      );
+      acc[teacher.id] = seedRulesForTeacher(seedable);
       return acc;
     }, {});
 
@@ -657,6 +758,7 @@ export function createCalculator(
     parseResult,
     teachers,
     classesByTeacher,
+    linkedRowsByClass,
     rulesByTeacher,
   });
 }
@@ -665,6 +767,7 @@ interface FacadeInternals {
   parseResult: PayDocumentParseResult;
   teachers: Teacher[];
   classesByTeacher: Map<string, ClassItem[]>;
+  linkedRowsByClass: Map<string, LinkedMinapHoesuRow[]>;
   rulesByTeacher: Record<string, RuleItem[]>;
 }
 
@@ -673,6 +776,7 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
     parseResult,
     teachers,
     classesByTeacher,
+    linkedRowsByClass,
     rulesByTeacher,
   } = state;
 
@@ -736,6 +840,9 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
       }
       return result;
     },
+
+    getLinkedMinapHoesuRows: (classId) =>
+      linkedRowsByClass.get(classId) ?? [],
 
     getRules: (teacherId) => rulesByTeacher[teacherId] ?? [],
 

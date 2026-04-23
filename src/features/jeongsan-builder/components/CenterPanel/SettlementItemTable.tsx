@@ -35,6 +35,7 @@ const BASE_OPTIONS: ReadonlyArray<{ value: BaseId; label: string }> = [
   { value: "hours", label: "시수" },
   { value: "students", label: "학생 수" },
   { value: "unpaidShare", label: "미납금" },
+  { value: "currentUnpaidNeg", label: "현재 미납금액 (-)" },
   { value: "direct", label: "직접 입력" },
 ];
 
@@ -204,6 +205,8 @@ function baseValueOf(base: BaseId, agg: ClassAggregate): number {
       return agg.students;
     case "unpaidShare":
       return agg.unpaid;
+    case "currentUnpaidNeg":
+      return -(agg.unpaid + agg.hoesu.minapTotal);
     case "direct":
       return 0;
   }
@@ -421,6 +424,7 @@ function ItemRow({
         </div>
         {canShowDetail ? (
           <CourseDetailPopover
+            teacherId={teacherId}
             classIds={rule.classIds}
             calculator={calculator}
           >
