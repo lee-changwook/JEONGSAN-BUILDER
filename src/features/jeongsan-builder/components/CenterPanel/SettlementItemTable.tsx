@@ -177,8 +177,8 @@ function RevenueMetrics({
                 it.value === 0
                   ? "var(--aca-black)"
                   : it.tone === "unpaid"
-                    ? "var(--aca-blue-primary)"
-                    : "var(--aca-red-primary)",
+                    ? "var(--aca-red-primary)"
+                    : "var(--aca-blue-primary)",
             }}
           >
             {formatKRW(it.value)}

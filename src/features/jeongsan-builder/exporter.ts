@@ -505,7 +505,18 @@ function renderRuleRow(
     { col: RULE_COL.prevRecovered, value: classMetrics.prevRecoveredPay, numFmt: "#,##0" },
     { col: RULE_COL.thisMonthPaid, value: classMetrics.thisMonthPaid, numFmt: "#,##0" },
     { col: RULE_COL.baseKind, value: BASE_LABEL[rule.base] },
-    { col: RULE_COL.baseVal, value: baseVal, numFmt: "#,##0" },
+    {
+      col: RULE_COL.baseVal,
+      value: baseVal,
+      // 베이스 종류별 포맷: hours는 소수 허용(예: 8.5시간), students는 정수 카운트,
+      // 그 외(금액류)는 천단위 구분.
+      numFmt:
+        rule.base === "hours"
+          ? "0.###"
+          : rule.base === "students"
+            ? "0"
+            : "#,##0",
+    },
     { col: RULE_COL.op, value: OP_LABEL[rule.op] },
     {
       col: RULE_COL.aux,
