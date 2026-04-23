@@ -13,6 +13,7 @@ import {
 import { MiniCheckbox } from "@/features/jeongsan-builder/components/MiniControls";
 import {
   formatKRW,
+  isSyntheticClassId,
   type BaseId,
   type CategoryId,
   type ClassItem,
@@ -20,51 +21,42 @@ import {
   type RuleItem,
   type SettlementCalculator,
 } from "@/features/jeongsan-builder/calculator";
+import { OP_OPTIONS } from "@/features/jeongsan-builder/components/AddItemModal/formOptions";
+import {
+  BulkFormInput,
+  BulkModeToggle,
+  BulkOpPicker,
+  BulkPasteInput,
+  collectFormRows,
+  createInitialBulk,
+  parseBulkText,
+  type BulkState,
+  type ModalMode,
+} from "@/features/jeongsan-builder/components/AddItemModal/bulk";
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 
 const REVENUE_BASE_OPTIONS: Array<{ id: BaseId; label: string; hint: string }> = [
   { id: "revenueVAT", label: "매출 (수수료 포함)", hint: "학생이 낸 총액 (납부액)" },
   { id: "revenueNet", label: "순매출 (수수료 제외)", hint: "카드 수수료 차감 후 실입금 (PAY)" },
-  { id: "revenueWithUnpaid", label: "매출 + 미납회수", hint: "순매출 + 미납금" },
+  {
+    id: "revenueWithUnpaidVAT",
+    label: "매출 + 미납회수 (수수료 미적용)",
+    hint: "납부액 + 전월 미납 회수금(원금)",
+  },
+  {
+    id: "revenueWithUnpaidNet",
+    label: "매출 + 미납회수 (수수료 적용)",
+    hint: "PAY + 전월 미납 회수 PAY",
+  },
   { id: "hours", label: "시수", hint: "수업 시간" },
   { id: "students", label: "학생 수", hint: "등록 학생 수" },
   { id: "unpaidShare", label: "미납금", hint: "미납액 합" },
-];
-
-const OP_OPTIONS: Array<{
-  id: OpId;
-  label: string;
-  hint: string;
-  needsAux: boolean;
-  auxLabel?: string;
-  auxPlaceholder?: string;
-}> = [
   {
-    id: "rate",
-    label: "비율",
-    hint: "베이스 × 비율",
-    needsAux: true,
-    auxLabel: "비율",
-    auxPlaceholder: "0 ~ 1 (예: 0.6)",
+    id: "currentUnpaidNeg",
+    label: "현재 미납금액 (-)",
+    hint: "당월 미납 + 전월 미회수를 음수로",
   },
-  { id: "fixed", label: "고정", hint: "베이스 값 그대로", needsAux: false },
-  {
-    id: "multiply",
-    label: "곱하기",
-    hint: "베이스 × 숫자",
-    needsAux: true,
-    auxLabel: "배수",
-    auxPlaceholder: "숫자 (예: 45000)",
-  },
-  {
-    id: "add",
-    label: "더하기",
-    hint: "베이스 + 숫자",
-    needsAux: true,
-    auxLabel: "가감값",
-    auxPlaceholder: "음수 가능",
-  },
-  { id: "custom", label: "커스텀", hint: "복합 수식 (데모)", needsAux: false },
+  { id: "direct", label: "직접 입력", hint: "금액을 직접 입력" },
 ];
 
 interface FormState {
@@ -77,6 +69,7 @@ interface FormState {
   name: string;
   taxable: boolean;
 }
+
 
 function createInitialForm(cat: CategoryId): FormState {
   return {
@@ -193,6 +186,14 @@ function CourseSelector({
   onChange: (patch: Partial<FormState>) => void;
 }) {
   const classes = calculator.getClasses(teacherId);
+  const existingRules = calculator.getRules(teacherId);
+  // 이 수업이 이미 다른 revenue rule에 포함돼 있는지 체크 (중복 표시용).
+  const usedClassIds = new Set<string>();
+  for (const r of existingRules) {
+    if (r.cat === "revenue") {
+      for (const cid of r.classIds) usedClassIds.add(cid);
+    }
+  }
   const query = state.courseSearch.trim().toLowerCase();
   const filtered =
     query === ""
@@ -253,6 +254,8 @@ function CourseSelector({
         ) : (
           filtered.map((c) => {
             const checked = state.classIds.has(c.id);
+            const alreadyUsed = usedClassIds.has(c.id);
+            const isSynthetic = isSyntheticClassId(c.id);
             return (
               <div
                 key={c.id}
@@ -273,21 +276,49 @@ function CourseSelector({
                 />
                 <div className="min-w-0 flex-1">
                   <div
-                    className="truncate text-[13px] font-medium"
+                    className="flex items-center gap-1.5 text-[13px] font-medium"
                     style={{ color: "var(--aca-black)" }}
                   >
-                    {c.name}
-                    {c.section && (
+                    <span className="truncate">
+                      {c.name}
+                      {c.section && (
+                        <span
+                          className="ml-1 text-[11px]"
+                          style={{ color: "var(--aca-gray-500)" }}
+                        >
+                          · {c.section}
+                        </span>
+                      )}
+                    </span>
+                    {isSynthetic && (
                       <span
-                        className="ml-1 text-[11px]"
-                        style={{ color: "var(--aca-gray-500)" }}
+                        className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
+                        style={{
+                          background: "var(--aca-yellow-10)",
+                          color: "var(--aca-yellow-primary)",
+                        }}
+                        title="수업 블록이 없고 미납회수 데이터에서 참조된 수업"
                       >
-                        · {c.section}
+                        미납회수 전용
+                      </span>
+                    )}
+                    {alreadyUsed && (
+                      <span
+                        className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
+                        style={{
+                          background: "var(--aca-yellow-10)",
+                          color: "var(--aca-yellow-primary)",
+                        }}
+                        title="이 수업은 이미 다른 항목에 포함되어 있습니다"
+                      >
+                        이미 추가됨
                       </span>
                     )}
                   </div>
                   <div className="text-[11px]" style={{ color: "var(--aca-gray-500)" }}>
-                    {c.students}명 · 순매출 {formatKRW(c.revenueNet)}
+                    {isSynthetic
+                      ? `전월 미회수 ${formatKRW(c.hoesu.minapTotal)}`
+                      : `${c.students}명 · 순매출 ${formatKRW(c.revenueNet)}`}
                   </div>
                 </div>
               </div>
@@ -320,13 +351,17 @@ function BaseValuePicker({
 }) {
   const classIds = Array.from(state.classIds);
   const agg = calculator.getClassAggregate(teacherId, classIds);
+  const directBaseVal = Number(state.customBase) || 0;
   const valueByBase: Record<BaseId, number> = {
     revenueVAT: agg.revenueVAT,
     revenueNet: agg.revenueNet,
-    revenueWithUnpaid: agg.revenueWithUnpaid,
+    revenueWithUnpaidVAT: agg.revenueWithUnpaidVAT,
+    revenueWithUnpaidNet: agg.revenueWithUnpaidNet,
     hours: agg.hours,
     students: agg.students,
     unpaidShare: agg.unpaid,
+    currentUnpaidNeg: -(agg.unpaid + agg.hoesu.minapTotal),
+    direct: directBaseVal,
   };
 
   return (
@@ -377,11 +412,13 @@ function BaseValuePicker({
                       : "var(--aca-gray-700)",
                 }}
               >
-                {classIds.length === 0
-                  ? isCount
-                    ? "0"
-                    : formatKRW(0)
-                  : formatBaseDisplay(opt.id, baseVal)}
+                {opt.id === "direct"
+                  ? formatKRW(baseVal)
+                  : classIds.length === 0
+                    ? isCount
+                      ? "0"
+                      : formatKRW(0)
+                    : formatBaseDisplay(opt.id, baseVal)}
               </div>
             </button>
           );
@@ -548,6 +585,9 @@ function computeBaseVal(
   calculator: SettlementCalculator,
 ): number {
   if (cat === "revenue") {
+    if (state.base === "direct") {
+      return Number(state.customBase) || 0;
+    }
     const classIds = Array.from(state.classIds);
     const agg = calculator.getClassAggregate(teacherId, classIds);
     switch (state.base) {
@@ -555,14 +595,18 @@ function computeBaseVal(
         return agg.revenueVAT;
       case "revenueNet":
         return agg.revenueNet;
-      case "revenueWithUnpaid":
-        return agg.revenueWithUnpaid;
+      case "revenueWithUnpaidVAT":
+        return agg.revenueWithUnpaidVAT;
+      case "revenueWithUnpaidNet":
+        return agg.revenueWithUnpaidNet;
       case "hours":
         return agg.hours;
       case "students":
         return agg.students;
       case "unpaidShare":
         return agg.unpaid;
+      case "currentUnpaidNeg":
+        return -(agg.unpaid + agg.hoesu.minapTotal);
     }
   }
   return Number(state.customBase) || 0;
@@ -717,57 +761,161 @@ function AddItemModalInner({ entryMode }: InnerProps) {
   const [form, setForm] = useState<FormState>(() =>
     createInitialForm(resolvedCategory ?? "revenue"),
   );
+  // plus/minus에서만 사용. revenue는 단일 모드 전용.
+  const [modalMode, setModalMode] = useState<ModalMode>("single");
+  const [bulk, setBulk] = useState<BulkState>(() =>
+    createInitialBulk(resolvedCategory ?? "plus"),
+  );
+  const isBulkMode = modalMode !== "single";
 
   function handlePickCategory(cat: CategoryId) {
     setPickedCategory(cat);
     setForm(createInitialForm(cat));
+    setBulk(createInitialBulk(cat));
+    setModalMode("single");
   }
 
   function handleResetCategory() {
     setPickedCategory(null);
-    // form은 카테고리 재선택 시 다시 초기화됨
+    setModalMode("single");
+    // form/bulk은 카테고리 재선택 시 다시 초기화됨
   }
 
   function patchForm(patch: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...patch }));
   }
 
+  function patchBulk(patch: Partial<BulkState>) {
+    setBulk((prev) => ({ ...prev, ...patch }));
+  }
+
   function handleSubmit() {
     if (!calculator || !activeTeacherId || !resolvedCategory) return;
-    const teacherClasses = calculator.getClasses(activeTeacherId);
-    const existingRules = calculator.getRules(activeTeacherId);
+    const teacherId = activeTeacherId;
+    const teacherClasses = calculator.getClasses(teacherId);
+    const existingRules = calculator.getRules(teacherId);
+
+    // 일괄 추가 모드(plus/minus): 각 행을 별개의 rule로 생성한다.
+    //   - paste: parseBulkText로 TSV/CSV 텍스트에서 파싱
+    //   - form: 편집 가능한 입력 행에서 직접 수집
+    // op, auxValue, 과세 여부는 모든 행에 bulk.* 공통값 적용.
+    if (resolvedCategory !== "revenue" && isBulkMode) {
+      type BulkItem = { name: string; amount: number };
+      let items: BulkItem[] = [];
+      if (modalMode === "paste") {
+        items = parseBulkText(bulk.raw)
+          .filter((r) => r.valid)
+          .map((r) => ({ name: r.name, amount: r.amount }));
+      } else if (modalMode === "form") {
+        items = collectFormRows(bulk.formRows);
+      }
+      if (items.length === 0) return;
+      const parsedAux = Number(bulk.auxValue);
+      const auxValue = Number.isFinite(parsedAux) ? parsedAux : 0;
+      for (const row of items) {
+        const rule: RuleItem = {
+          id: generateRuleId(),
+          rule: "",
+          cat: resolvedCategory,
+          name: row.name,
+          classIds: [],
+          base: "revenueNet",
+          op: bulk.op,
+          value: auxValue,
+          customBase: row.amount,
+          taxable: bulk.defaultTaxable,
+        };
+        addRule(teacherId, rule);
+      }
+      closeModal();
+      return;
+    }
 
     const parsedValue = Number(form.value);
     const parsedCustomBase = Number(form.customBase);
+    const customName = form.name.trim();
+
+    const isDirect = resolvedCategory === "revenue" && form.base === "direct";
+    const value = Number.isFinite(parsedValue) ? parsedValue : 0;
+    const customBase = Number.isFinite(parsedCustomBase) ? parsedCustomBase : 0;
+
+    // 수업 기반(revenue, 비 direct)에서 여러 수업이 선택된 경우 각 수업을 별개의 rule로 추가한다.
+    // 그 외(direct / plus / minus)는 단일 rule.
+    if (resolvedCategory === "revenue" && !isDirect) {
+      const selectedClassIds = Array.from(form.classIds);
+
+      // R 라벨을 연속 증가시키기 위해 기존 규칙 리스트를 누적 복제하며 계산.
+      const accumulated: RuleItem[] = [...existingRules];
+      const toAdd: RuleItem[] = [];
+      for (const classId of selectedClassIds) {
+        const classItem = teacherClasses.find((c) => c.id === classId);
+        const name =
+          customName ||
+          (classItem ? `${classItem.name} 수업료` : "수업 기반 항목");
+        const rule: RuleItem = {
+          id: generateRuleId(),
+          rule: nextRuleLabel(accumulated, "revenue"),
+          cat: "revenue",
+          name,
+          classIds: [classId],
+          base: form.base,
+          op: form.op,
+          value,
+          customBase: 0,
+          taxable: form.taxable,
+        };
+        toAdd.push(rule);
+        accumulated.push(rule);
+      }
+      for (const r of toAdd) addRule(teacherId, r);
+      closeModal();
+      return;
+    }
+
     const name =
-      form.name.trim() || defaultItemName(resolvedCategory, form, teacherClasses);
+      customName || defaultItemName(resolvedCategory, form, teacherClasses);
 
     const rule: RuleItem = {
       id: generateRuleId(),
       rule: nextRuleLabel(existingRules, resolvedCategory),
       cat: resolvedCategory,
       name,
-      classIds: resolvedCategory === "revenue" ? Array.from(form.classIds) : [],
+      classIds: [],
       base: form.base,
       op: form.op,
-      value: Number.isFinite(parsedValue) ? parsedValue : 0,
-      customBase:
-        resolvedCategory === "revenue"
-          ? 0
-          : Number.isFinite(parsedCustomBase)
-            ? parsedCustomBase
-            : 0,
+      value,
+      customBase,
       taxable: form.taxable,
     };
 
-    addRule(activeTeacherId, rule);
+    addRule(teacherId, rule);
     closeModal();
   }
 
   const canSubmit = (() => {
     if (!resolvedCategory) return false;
-    if (resolvedCategory === "revenue" && form.classIds.size === 0) return false;
-    if (resolvedCategory !== "revenue") {
+    if (resolvedCategory !== "revenue" && isBulkMode) {
+      // aux 값 요구 검증
+      const opDef = OP_OPTIONS.find((o) => o.id === bulk.op);
+      if (opDef?.needsAux) {
+        const v = Number(bulk.auxValue);
+        if (!Number.isFinite(v)) return false;
+      }
+      if (modalMode === "paste") {
+        return parseBulkText(bulk.raw).some((r) => r.valid);
+      }
+      return collectFormRows(bulk.formRows).length > 0;
+    }
+    const isRevenueDirect =
+      resolvedCategory === "revenue" && form.base === "direct";
+    if (
+      resolvedCategory === "revenue" &&
+      !isRevenueDirect &&
+      form.classIds.size === 0
+    ) {
+      return false;
+    }
+    if (resolvedCategory !== "revenue" || isRevenueDirect) {
       const parsed = Number(form.customBase);
       if (!Number.isFinite(parsed) || parsed <= 0) return false;
     }
@@ -813,33 +961,76 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         <CategoryPicker onPick={handlePickCategory} />
       ) : resolvedCategory && calculator && activeTeacherId ? (
         <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
+          {resolvedCategory !== "revenue" && (
+            <BulkModeToggle mode={modalMode} onChange={setModalMode} />
+          )}
+
           {resolvedCategory === "revenue" ? (
             <>
-              <CourseSelector
-                teacherId={activeTeacherId}
-                calculator={calculator}
-                state={form}
-                onChange={patchForm}
-              />
+              {form.base === "direct" ? (
+                <CustomBaseInput state={form} onChange={patchForm} />
+              ) : (
+                <CourseSelector
+                  teacherId={activeTeacherId}
+                  calculator={calculator}
+                  state={form}
+                  onChange={patchForm}
+                />
+              )}
               <BaseValuePicker
                 state={form}
                 onChange={patchForm}
                 teacherId={activeTeacherId}
                 calculator={calculator}
               />
+              <FormulaPicker state={form} onChange={patchForm} />
+              <NamingStep state={form} onChange={patchForm} />
+              <FormulaPreview
+                cat={resolvedCategory}
+                state={form}
+                teacherId={activeTeacherId}
+                calculator={calculator}
+              />
+            </>
+          ) : modalMode === "paste" ? (
+            <>
+              <BulkPasteInput
+                cat={resolvedCategory}
+                state={bulk}
+                onChange={patchBulk}
+              />
+              <BulkOpPicker
+                op={bulk.op}
+                auxValue={bulk.auxValue}
+                onChange={(p) => patchBulk(p)}
+              />
+            </>
+          ) : modalMode === "form" ? (
+            <>
+              <BulkFormInput
+                cat={resolvedCategory}
+                state={bulk}
+                onChange={patchBulk}
+              />
+              <BulkOpPicker
+                op={bulk.op}
+                auxValue={bulk.auxValue}
+                onChange={(p) => patchBulk(p)}
+              />
             </>
           ) : (
-            <CustomBaseInput state={form} onChange={patchForm} />
+            <>
+              <CustomBaseInput state={form} onChange={patchForm} />
+              <FormulaPicker state={form} onChange={patchForm} />
+              <NamingStep state={form} onChange={patchForm} />
+              <FormulaPreview
+                cat={resolvedCategory}
+                state={form}
+                teacherId={activeTeacherId}
+                calculator={calculator}
+              />
+            </>
           )}
-
-          <FormulaPicker state={form} onChange={patchForm} />
-          <NamingStep state={form} onChange={patchForm} />
-          <FormulaPreview
-            cat={resolvedCategory}
-            state={form}
-            teacherId={activeTeacherId}
-            calculator={calculator}
-          />
         </div>
       ) : (
         <div
@@ -877,21 +1068,39 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         >
           취소
         </button>
-        {!showCategoryPicker && (
-          <button
-            type="button"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-            className="cursor-pointer rounded-md px-4 py-2 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              background: "var(--aca-black)",
-              color: "var(--aca-white)",
-              border: "none",
-            }}
-          >
-            추가하기
-          </button>
-        )}
+        {!showCategoryPicker && (() => {
+          const isBulk = resolvedCategory !== "revenue" && isBulkMode;
+          let bulkValidCount = 0;
+          if (isBulk) {
+            if (modalMode === "paste") {
+              bulkValidCount = parseBulkText(bulk.raw).filter(
+                (r) => r.valid,
+              ).length;
+            } else {
+              bulkValidCount = collectFormRows(bulk.formRows).length;
+            }
+          }
+          const label = isBulk
+            ? bulkValidCount > 0
+              ? `${bulkValidCount}개 추가`
+              : "추가하기"
+            : "추가하기";
+          return (
+            <button
+              type="button"
+              disabled={!canSubmit}
+              onClick={handleSubmit}
+              className="cursor-pointer rounded-md px-4 py-2 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                background: "var(--aca-black)",
+                color: "var(--aca-white)",
+                border: "none",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })()}
       </DialogFooter>
     </>
   );
