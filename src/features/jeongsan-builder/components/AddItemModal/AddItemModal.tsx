@@ -20,6 +20,18 @@ import {
   type RuleItem,
   type SettlementCalculator,
 } from "@/features/jeongsan-builder/calculator";
+import { OP_OPTIONS } from "@/features/jeongsan-builder/components/AddItemModal/formOptions";
+import {
+  BulkFormInput,
+  BulkModeToggle,
+  BulkOpPicker,
+  BulkPasteInput,
+  collectFormRows,
+  createInitialBulk,
+  parseBulkText,
+  type BulkState,
+  type ModalMode,
+} from "@/features/jeongsan-builder/components/AddItemModal/bulk";
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 
 const REVENUE_BASE_OPTIONS: Array<{ id: BaseId; label: string; hint: string }> = [
@@ -41,42 +53,6 @@ const REVENUE_BASE_OPTIONS: Array<{ id: BaseId; label: string; hint: string }> =
   { id: "direct", label: "직접 입력", hint: "금액을 직접 입력" },
 ];
 
-const OP_OPTIONS: Array<{
-  id: OpId;
-  label: string;
-  hint: string;
-  needsAux: boolean;
-  auxLabel?: string;
-  auxPlaceholder?: string;
-}> = [
-  {
-    id: "rate",
-    label: "비율",
-    hint: "베이스 × 비율",
-    needsAux: true,
-    auxLabel: "비율",
-    auxPlaceholder: "0 ~ 1 (예: 0.6)",
-  },
-  { id: "fixed", label: "고정", hint: "베이스 값 그대로", needsAux: false },
-  {
-    id: "multiply",
-    label: "곱하기",
-    hint: "베이스 × 숫자",
-    needsAux: true,
-    auxLabel: "배수",
-    auxPlaceholder: "숫자 (예: 45000)",
-  },
-  {
-    id: "add",
-    label: "더하기",
-    hint: "베이스 + 숫자",
-    needsAux: true,
-    auxLabel: "가감값",
-    auxPlaceholder: "음수 가능",
-  },
-  { id: "custom", label: "커스텀", hint: "복합 수식 (데모)", needsAux: false },
-];
-
 interface FormState {
   classIds: Set<string>;
   courseSearch: string;
@@ -87,6 +63,7 @@ interface FormState {
   name: string;
   taxable: boolean;
 }
+
 
 function createInitialForm(cat: CategoryId): FormState {
   return {
@@ -760,19 +737,32 @@ function AddItemModalInner({ entryMode }: InnerProps) {
   const [form, setForm] = useState<FormState>(() =>
     createInitialForm(resolvedCategory ?? "revenue"),
   );
+  // plus/minus에서만 사용. revenue는 단일 모드 전용.
+  const [modalMode, setModalMode] = useState<ModalMode>("single");
+  const [bulk, setBulk] = useState<BulkState>(() =>
+    createInitialBulk(resolvedCategory ?? "plus"),
+  );
+  const isBulkMode = modalMode !== "single";
 
   function handlePickCategory(cat: CategoryId) {
     setPickedCategory(cat);
     setForm(createInitialForm(cat));
+    setBulk(createInitialBulk(cat));
+    setModalMode("single");
   }
 
   function handleResetCategory() {
     setPickedCategory(null);
-    // form은 카테고리 재선택 시 다시 초기화됨
+    setModalMode("single");
+    // form/bulk은 카테고리 재선택 시 다시 초기화됨
   }
 
   function patchForm(patch: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...patch }));
+  }
+
+  function patchBulk(patch: Partial<BulkState>) {
+    setBulk((prev) => ({ ...prev, ...patch }));
   }
 
   function handleSubmit() {
@@ -780,6 +770,42 @@ function AddItemModalInner({ entryMode }: InnerProps) {
     const teacherId = activeTeacherId;
     const teacherClasses = calculator.getClasses(teacherId);
     const existingRules = calculator.getRules(teacherId);
+
+    // 일괄 추가 모드(plus/minus): 각 행을 별개의 rule로 생성한다.
+    //   - paste: parseBulkText로 TSV/CSV 텍스트에서 파싱
+    //   - form: 편집 가능한 입력 행에서 직접 수집
+    // op, auxValue, 과세 여부는 모든 행에 bulk.* 공통값 적용.
+    if (resolvedCategory !== "revenue" && isBulkMode) {
+      type BulkItem = { name: string; amount: number };
+      let items: BulkItem[] = [];
+      if (modalMode === "paste") {
+        items = parseBulkText(bulk.raw)
+          .filter((r) => r.valid)
+          .map((r) => ({ name: r.name, amount: r.amount }));
+      } else if (modalMode === "form") {
+        items = collectFormRows(bulk.formRows);
+      }
+      if (items.length === 0) return;
+      const parsedAux = Number(bulk.auxValue);
+      const auxValue = Number.isFinite(parsedAux) ? parsedAux : 0;
+      for (const row of items) {
+        const rule: RuleItem = {
+          id: generateRuleId(),
+          rule: "",
+          cat: resolvedCategory,
+          name: row.name,
+          classIds: [],
+          base: "revenueNet",
+          op: bulk.op,
+          value: auxValue,
+          customBase: row.amount,
+          taxable: bulk.defaultTaxable,
+        };
+        addRule(teacherId, rule);
+      }
+      closeModal();
+      return;
+    }
 
     const parsedValue = Number(form.value);
     const parsedCustomBase = Number(form.customBase);
@@ -844,6 +870,18 @@ function AddItemModalInner({ entryMode }: InnerProps) {
 
   const canSubmit = (() => {
     if (!resolvedCategory) return false;
+    if (resolvedCategory !== "revenue" && isBulkMode) {
+      // aux 값 요구 검증
+      const opDef = OP_OPTIONS.find((o) => o.id === bulk.op);
+      if (opDef?.needsAux) {
+        const v = Number(bulk.auxValue);
+        if (!Number.isFinite(v)) return false;
+      }
+      if (modalMode === "paste") {
+        return parseBulkText(bulk.raw).some((r) => r.valid);
+      }
+      return collectFormRows(bulk.formRows).length > 0;
+    }
     const isRevenueDirect =
       resolvedCategory === "revenue" && form.base === "direct";
     if (
@@ -899,9 +937,12 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         <CategoryPicker onPick={handlePickCategory} />
       ) : resolvedCategory && calculator && activeTeacherId ? (
         <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
+          {resolvedCategory !== "revenue" && (
+            <BulkModeToggle mode={modalMode} onChange={setModalMode} />
+          )}
+
           {resolvedCategory === "revenue" ? (
             <>
-             
               {form.base === "direct" ? (
                 <CustomBaseInput state={form} onChange={patchForm} />
               ) : (
@@ -912,25 +953,60 @@ function AddItemModalInner({ entryMode }: InnerProps) {
                   onChange={patchForm}
                 />
               )}
-               <BaseValuePicker
+              <BaseValuePicker
                 state={form}
                 onChange={patchForm}
                 teacherId={activeTeacherId}
                 calculator={calculator}
               />
+              <FormulaPicker state={form} onChange={patchForm} />
+              <NamingStep state={form} onChange={patchForm} />
+              <FormulaPreview
+                cat={resolvedCategory}
+                state={form}
+                teacherId={activeTeacherId}
+                calculator={calculator}
+              />
+            </>
+          ) : modalMode === "paste" ? (
+            <>
+              <BulkPasteInput
+                cat={resolvedCategory}
+                state={bulk}
+                onChange={patchBulk}
+              />
+              <BulkOpPicker
+                op={bulk.op}
+                auxValue={bulk.auxValue}
+                onChange={(p) => patchBulk(p)}
+              />
+            </>
+          ) : modalMode === "form" ? (
+            <>
+              <BulkFormInput
+                cat={resolvedCategory}
+                state={bulk}
+                onChange={patchBulk}
+              />
+              <BulkOpPicker
+                op={bulk.op}
+                auxValue={bulk.auxValue}
+                onChange={(p) => patchBulk(p)}
+              />
             </>
           ) : (
-            <CustomBaseInput state={form} onChange={patchForm} />
+            <>
+              <CustomBaseInput state={form} onChange={patchForm} />
+              <FormulaPicker state={form} onChange={patchForm} />
+              <NamingStep state={form} onChange={patchForm} />
+              <FormulaPreview
+                cat={resolvedCategory}
+                state={form}
+                teacherId={activeTeacherId}
+                calculator={calculator}
+              />
+            </>
           )}
-
-          <FormulaPicker state={form} onChange={patchForm} />
-          <NamingStep state={form} onChange={patchForm} />
-          <FormulaPreview
-            cat={resolvedCategory}
-            state={form}
-            teacherId={activeTeacherId}
-            calculator={calculator}
-          />
         </div>
       ) : (
         <div
@@ -968,21 +1044,39 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         >
           취소
         </button>
-        {!showCategoryPicker && (
-          <button
-            type="button"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-            className="cursor-pointer rounded-md px-4 py-2 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              background: "var(--aca-black)",
-              color: "var(--aca-white)",
-              border: "none",
-            }}
-          >
-            추가하기
-          </button>
-        )}
+        {!showCategoryPicker && (() => {
+          const isBulk = resolvedCategory !== "revenue" && isBulkMode;
+          let bulkValidCount = 0;
+          if (isBulk) {
+            if (modalMode === "paste") {
+              bulkValidCount = parseBulkText(bulk.raw).filter(
+                (r) => r.valid,
+              ).length;
+            } else {
+              bulkValidCount = collectFormRows(bulk.formRows).length;
+            }
+          }
+          const label = isBulk
+            ? bulkValidCount > 0
+              ? `${bulkValidCount}개 추가`
+              : "추가하기"
+            : "추가하기";
+          return (
+            <button
+              type="button"
+              disabled={!canSubmit}
+              onClick={handleSubmit}
+              className="cursor-pointer rounded-md px-4 py-2 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                background: "var(--aca-black)",
+                color: "var(--aca-white)",
+                border: "none",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })()}
       </DialogFooter>
     </>
   );
