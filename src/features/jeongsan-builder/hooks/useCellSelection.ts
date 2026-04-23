@@ -2,9 +2,18 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 
-export type CellCol = "value" | "customBase";
+export type CellCol = "base" | "op" | "value" | "customBase" | "taxable";
 
-const CELL_COLS: ReadonlyArray<CellCol> = ["value", "customBase"];
+// 테이블 컬럼의 시각적 좌→우 순서로 정렬.
+// customBase는 revenue+direct일 때 base 자리에 중첩 렌더되지만, 논리적으로는
+// value 계열로 묶어 rect-select 시 자연스러운 묶음이 되도록 뒤에 둔다.
+const CELL_COLS: ReadonlyArray<CellCol> = [
+  "base",
+  "op",
+  "value",
+  "customBase",
+  "taxable",
+];
 
 export interface DraggableMap {
   /** ruleId → 드래그 가능한 컬럼 집합. customBase는 cat !== 'revenue', value는 op.needsAux. */
@@ -118,8 +127,18 @@ export function useCellSelection(
         if (selected.size > 0) setSelected(new Set());
         return;
       }
+      const key = `${cell.id}|${cell.col}`;
+      // 이미 multi-selection(2개 이상)의 일부인 셀을 다시 mousedown하면
+      // selection도 dragRef도 건드리지 않는다. 이렇게 해야:
+      //   1) 후속 click에서 드롭다운/체크박스가 열려 bulk 적용 가능
+      //   2) mousedown 직후의 미세한 mousemove가 rect를 새로 계산해 selection을
+      //      1개로 축소해버리는 문제를 방지
+      // 다른 셀로 drag를 시작하려면 바깥 영역을 먼저 클릭해 selection을 비운 뒤 시작.
+      if (selected.has(key) && selected.size > 1) {
+        return;
+      }
       dragRef.current = { startId: cell.id, startCol: cell.col };
-      setSelected(new Set([`${cell.id}|${cell.col}`]));
+      setSelected(new Set([key]));
     },
     [getCellFromEvent, selected, draggable],
   );

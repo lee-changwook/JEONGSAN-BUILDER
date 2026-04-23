@@ -40,9 +40,18 @@ export interface Teacher {
   classIds: string[];
 }
 
+export type ClassKind = "sueop" | "bochungbi" | "synthetic";
+
 export interface ClassItem {
   id: string;
   teacherId: string;
+  /**
+   * 수업 분류. UI에서 뱃지 색상 등으로 구분:
+   *   - sueop: 일반 수업
+   *   - bochungbi: 보충비 (bochungbi 시트에서 파싱)
+   *   - synthetic: 미납회수 전용 (매출 블록이 없고 linkedSueopName으로만 참조됨)
+   */
+  kind: ClassKind;
   name: string;
   section: string | null;
   description: string | null;
@@ -193,9 +202,14 @@ function blockToClassItem(
   if (block.scheduleText) descParts.push(block.scheduleText);
   const description = descParts.length > 0 ? descParts.join(" · ") : null;
 
+  // block.kind는 "sueop" | "bochungbi" | "minap_hoesu"지만, minap_hoesu는
+  // 이 경로로 들어오지 않도록 호출부에서 필터링되어 있음.
+  const kind: ClassKind = block.kind === "bochungbi" ? "bochungbi" : "sueop";
+
   return {
     id: block.id,
     teacherId,
+    kind,
     name: block.sueopName,
     section: block.boonbanName,
     description,
@@ -377,6 +391,7 @@ function buildTeachersAndClasses(
           const synth: ClassItem = {
             id: syntheticClassId(teacherId, key),
             teacherId,
+            kind: "synthetic",
             name: linkedName,
             section: null,
             description: "미납회수 전용 (수업 데이터 없음)",
@@ -559,9 +574,10 @@ function seedRulesForTeacher(classes: ClassItem[]): RuleItem[] {
     id: `r-${cls.id}`,
     rule: `R${index + 1}`,
     cat: "revenue",
-    name: `${cls.name} 수업료`,
+    name: cls.name,
     classIds: [cls.id],
-    base: "revenueNet",
+    // "매출 + 미납회수 (수수료 적용)"을 기본값으로 — 가장 많이 사용되는 베이스.
+    base: "revenueWithUnpaidNet",
     op: "rate",
     value: 0.6,
     customBase: 0,
@@ -722,6 +738,27 @@ export interface SettlementCalculator {
     teacherId: string,
     ruleId: string,
     taxable: boolean,
+  ): SettlementCalculator;
+  bulkSetTaxable(
+    teacherId: string,
+    ruleIds: string[],
+    taxable: boolean,
+  ): SettlementCalculator;
+  bulkSetBase(
+    teacherId: string,
+    ruleIds: string[],
+    base: BaseId,
+  ): SettlementCalculator;
+  bulkSetOp(
+    teacherId: string,
+    ruleIds: string[],
+    op: OpId,
+  ): SettlementCalculator;
+  /** ruleId를 같은 강사의 rule 리스트 내에서 toIndex 위치로 이동. */
+  moveRule(
+    teacherId: string,
+    ruleId: string,
+    toIndex: number,
   ): SettlementCalculator;
 
   // 내부 상태 스냅샷 (export 등에서 사용 예정)
@@ -945,6 +982,44 @@ function buildFacade(state: FacadeInternals): SettlementCalculator {
     setTaxable: (teacherId, ruleId, taxable) => {
       const current = rulesByTeacher[teacherId] ?? [];
       const next = current.map((r) => (r.id === ruleId ? { ...r, taxable } : r));
+      return withRules(teacherId, next);
+    },
+
+    bulkSetTaxable: (teacherId, ruleIds, taxable) => {
+      const idSet = new Set(ruleIds);
+      const current = rulesByTeacher[teacherId] ?? [];
+      const next = current.map((r) =>
+        idSet.has(r.id) ? { ...r, taxable } : r,
+      );
+      return withRules(teacherId, next);
+    },
+
+    bulkSetBase: (teacherId, ruleIds, base) => {
+      const idSet = new Set(ruleIds);
+      const current = rulesByTeacher[teacherId] ?? [];
+      // base는 revenue rule에만 의미가 있으므로 cat === "revenue"만 적용.
+      const next = current.map((r) =>
+        idSet.has(r.id) && r.cat === "revenue" ? { ...r, base } : r,
+      );
+      return withRules(teacherId, next);
+    },
+
+    bulkSetOp: (teacherId, ruleIds, op) => {
+      const idSet = new Set(ruleIds);
+      const current = rulesByTeacher[teacherId] ?? [];
+      const next = current.map((r) => (idSet.has(r.id) ? { ...r, op } : r));
+      return withRules(teacherId, next);
+    },
+
+    moveRule: (teacherId, ruleId, toIndex) => {
+      const current = rulesByTeacher[teacherId] ?? [];
+      const fromIndex = current.findIndex((r) => r.id === ruleId);
+      if (fromIndex < 0) return buildFacade(state);
+      const clamped = Math.max(0, Math.min(toIndex, current.length - 1));
+      if (fromIndex === clamped) return buildFacade(state);
+      const next = current.slice();
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(clamped, 0, moved);
       return withRules(teacherId, next);
     },
 

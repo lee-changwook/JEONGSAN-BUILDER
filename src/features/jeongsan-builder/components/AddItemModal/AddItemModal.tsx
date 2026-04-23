@@ -35,19 +35,20 @@ import {
 } from "@/features/jeongsan-builder/components/AddItemModal/bulk";
 import { useBuilderStore } from "@/features/jeongsan-builder/store/useBuilderStore";
 
+// revenueWithUnpaidNet(매출 + 미납회수 · 수수료 적용)을 최상단 + 기본값으로 (가장 많이 사용).
 const REVENUE_BASE_OPTIONS: Array<{ id: BaseId; label: string; hint: string }> = [
-  { id: "revenueVAT", label: "매출 (수수료 포함)", hint: "학생이 낸 총액 (납부액)" },
-  { id: "revenueNet", label: "순매출 (수수료 제외)", hint: "카드 수수료 차감 후 실입금 (PAY)" },
+  {
+    id: "revenueWithUnpaidNet",
+    label: "매출 + 미납회수 (수수료 적용)",
+    hint: "PAY + 전월 미납 회수 PAY · 가장 많이 사용",
+  },
   {
     id: "revenueWithUnpaidVAT",
     label: "매출 + 미납회수 (수수료 미적용)",
     hint: "납부액 + 전월 미납 회수금(원금)",
   },
-  {
-    id: "revenueWithUnpaidNet",
-    label: "매출 + 미납회수 (수수료 적용)",
-    hint: "PAY + 전월 미납 회수 PAY",
-  },
+  { id: "revenueVAT", label: "매출 (수수료 포함)", hint: "학생이 낸 총액 (납부액)" },
+  { id: "revenueNet", label: "순매출 (수수료 제외)", hint: "카드 수수료 차감 후 실입금 (PAY)" },
   { id: "hours", label: "시수", hint: "수업 시간" },
   { id: "students", label: "학생 수", hint: "등록 학생 수" },
   { id: "unpaidShare", label: "미납금", hint: "미납액 합" },
@@ -75,7 +76,8 @@ function createInitialForm(cat: CategoryId): FormState {
   return {
     classIds: new Set<string>(),
     courseSearch: "",
-    base: "revenueNet",
+    // revenue는 "매출 + 미납회수 (수수료 적용)"이 가장 자주 쓰이므로 기본값.
+    base: "revenueWithUnpaidNet",
     op: cat === "revenue" ? "rate" : "fixed",
     value: cat === "revenue" ? "0.6" : "0",
     customBase: "",
@@ -207,6 +209,7 @@ function CourseSelector({
             const checked = state.classIds.has(c.id);
             const alreadyUsed = usedClassIds.has(c.id);
             const isSynthetic = isSyntheticClassId(c.id);
+            const isBochungbi = c.kind === "bochungbi";
             return (
               <div
                 key={c.id}
@@ -239,6 +242,18 @@ function CourseSelector({
                         </span>
                       )}
                     </span>
+                    {isBochungbi && (
+                      <span
+                        className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
+                        style={{
+                          background: "var(--aca-green-light)",
+                          color: "var(--aca-green)",
+                        }}
+                        title="보충비 시트에서 파싱된 수업"
+                      >
+                        보충비
+                      </span>
+                    )}
                     {isSynthetic && (
                       <span
                         className="inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-[1px] text-[10px] font-semibold leading-[1.3]"
@@ -420,14 +435,16 @@ function FormulaPicker({
           const buttonClass = selected
             ? "border-[var(--aca-black)] bg-[var(--aca-black)] text-[var(--aca-white)]"
             : "border-[var(--aca-gray-200)] bg-[var(--aca-white)] text-[var(--aca-gray-700)]";
+          const Icon = opt.Icon;
           return (
             <button
               key={opt.id}
               type="button"
               onClick={() => onChange({ op: opt.id })}
-              className={`cursor-pointer rounded-[4px] border px-3 py-1.5 text-[12px] font-semibold ${buttonClass}`}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-[4px] border px-2.5 py-1.5 text-[12px] font-semibold ${buttonClass}`}
               title={opt.hint}
             >
+              <Icon className="size-3.5" aria-hidden />
               {opt.label}
             </button>
           );
@@ -633,8 +650,8 @@ function defaultItemName(
 ): string {
   if (cat === "revenue") {
     const selected = teacherClasses.filter((c) => state.classIds.has(c.id));
-    if (selected.length === 1) return `${selected[0].name} 수업료`;
-    if (selected.length > 1) return `선택한 ${selected.length}개 수업료`;
+    if (selected.length === 1) return selected[0].name;
+    if (selected.length > 1) return `선택한 ${selected.length}개 수업`;
     return "수업 기반 항목";
   }
   if (cat === "plus") return "지급 항목";
@@ -750,7 +767,7 @@ function AddItemModalInner({ entryMode }: InnerProps) {
         const classItem = teacherClasses.find((c) => c.id === classId);
         const name =
           customName ||
-          (classItem ? `${classItem.name} 수업료` : "수업 기반 항목");
+          (classItem ? classItem.name : "수업 기반 항목");
         const rule: RuleItem = {
           id: generateRuleId(),
           rule: nextRuleLabel(accumulated, "revenue"),

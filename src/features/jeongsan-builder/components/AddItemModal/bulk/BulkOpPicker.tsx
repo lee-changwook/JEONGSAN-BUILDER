@@ -25,12 +25,13 @@ export function BulkOpPicker({
       <div className="flex flex-wrap gap-1.5">
         {OP_OPTIONS.map((opt) => {
           const selected = op === opt.id;
+          const Icon = opt.Icon;
           return (
             <button
               key={opt.id}
               type="button"
               onClick={() => onChange({ op: opt.id })}
-              className="cursor-pointer rounded-[4px] px-3 py-1.5 text-[12px] font-semibold"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2.5 py-1.5 text-[12px] font-semibold"
               style={{
                 background: selected ? "var(--aca-black)" : "var(--aca-white)",
                 color: selected ? "var(--aca-white)" : "var(--aca-gray-700)",
@@ -38,6 +39,7 @@ export function BulkOpPicker({
               }}
               title={opt.hint}
             >
+              <Icon className="size-3.5" aria-hidden />
               {opt.label}
             </button>
           );

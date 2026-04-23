@@ -78,9 +78,27 @@ interface BuilderState {
     customBase: number,
   ) => void;
   setRuleTaxable: (teacherId: string, ruleId: string, taxable: boolean) => void;
+  bulkSetRuleTaxable: (
+    teacherId: string,
+    ruleIds: string[],
+    taxable: boolean,
+  ) => void;
+  bulkSetRuleBase: (
+    teacherId: string,
+    ruleIds: string[],
+    base: import("@/features/jeongsan-builder/calculator").BaseId,
+  ) => void;
+  bulkSetRuleOp: (
+    teacherId: string,
+    ruleIds: string[],
+    op: import("@/features/jeongsan-builder/calculator").OpId,
+  ) => void;
+  moveRule: (teacherId: string, ruleId: string, toIndex: number) => void;
 
   // --- Actions: UI (center) ---
   toggleRuleSelection: (teacherId: string, ruleId: string) => void;
+  selectAllRules: (teacherId: string) => void;
+  clearRuleSelection: (teacherId: string) => void;
 
   // --- Actions: UI (right) ---
   setActiveTeacherId: (teacherId: string | null) => void;
@@ -286,6 +304,46 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         : state,
     ),
 
+  bulkSetRuleTaxable: (teacherId, ruleIds, taxable) =>
+    set((state) =>
+      state.calculator
+        ? {
+            calculator: state.calculator.bulkSetTaxable(
+              teacherId,
+              ruleIds,
+              taxable,
+            ),
+          }
+        : state,
+    ),
+
+  bulkSetRuleBase: (teacherId, ruleIds, base) =>
+    set((state) =>
+      state.calculator
+        ? {
+            calculator: state.calculator.bulkSetBase(
+              teacherId,
+              ruleIds,
+              base,
+            ),
+          }
+        : state,
+    ),
+
+  bulkSetRuleOp: (teacherId, ruleIds, op) =>
+    set((state) =>
+      state.calculator
+        ? { calculator: state.calculator.bulkSetOp(teacherId, ruleIds, op) }
+        : state,
+    ),
+
+  moveRule: (teacherId, ruleId, toIndex) =>
+    set((state) =>
+      state.calculator
+        ? { calculator: state.calculator.moveRule(teacherId, ruleId, toIndex) }
+        : state,
+    ),
+
   // --- center ui ---
   toggleRuleSelection: (teacherId, ruleId) =>
     set((state) => {
@@ -297,6 +355,26 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         selectedRuleIds: { ...state.selectedRuleIds, [teacherId]: next },
       };
     }),
+
+  selectAllRules: (teacherId) =>
+    set((state) => {
+      if (!state.calculator) return state;
+      const allIds = state.calculator.getRules(teacherId).map((r) => r.id);
+      return {
+        selectedRuleIds: {
+          ...state.selectedRuleIds,
+          [teacherId]: new Set(allIds),
+        },
+      };
+    }),
+
+  clearRuleSelection: (teacherId) =>
+    set((state) => ({
+      selectedRuleIds: {
+        ...state.selectedRuleIds,
+        [teacherId]: new Set<string>(),
+      },
+    })),
 
   // --- right ui ---
   setActiveTeacherId: (teacherId) => set({ activeTeacherId: teacherId }),

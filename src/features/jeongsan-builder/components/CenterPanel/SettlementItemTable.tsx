@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, GripVertical } from "lucide-react";
 
+import { BaseValuePopover } from "@/features/jeongsan-builder/components/CenterPanel/BaseValuePopover";
 import { CourseDetailPopover } from "@/features/jeongsan-builder/components/CenterPanel/CourseDetailPopover";
+import { OpDropdown } from "@/features/jeongsan-builder/components/CenterPanel/OpDropdown";
 import {
   MiniCheckbox,
-  MiniDropdown,
   MiniInput,
 } from "@/features/jeongsan-builder/components/MiniControls";
 import {
@@ -23,29 +24,10 @@ import {
   formatKRW,
   type BaseId,
   type ClassAggregate,
+  type ClassKind,
   type RuleItem,
   type SettlementCalculator,
 } from "@/features/jeongsan-builder/calculator";
-
-const BASE_OPTIONS: ReadonlyArray<{ value: BaseId; label: string }> = [
-  { value: "revenueVAT", label: "매출 (수수료 포함)" },
-  { value: "revenueNet", label: "순매출 (수수료 제외)" },
-  { value: "revenueWithUnpaidVAT", label: "매출 + 미납회수 (수수료 미적용)" },
-  { value: "revenueWithUnpaidNet", label: "매출 + 미납회수 (수수료 적용)" },
-  { value: "hours", label: "시수" },
-  { value: "students", label: "학생 수" },
-  { value: "unpaidShare", label: "미납금" },
-  { value: "currentUnpaidNeg", label: "현재 미납금액 (-)" },
-  { value: "direct", label: "직접 입력" },
-];
-
-const OP_OPTIONS: ReadonlyArray<{ value: RuleItem["op"]; label: string }> = [
-  { value: "rate", label: "비율" },
-  { value: "fixed", label: "고정" },
-  { value: "multiply", label: "곱하기" },
-  { value: "add", label: "더하기" },
-  { value: "custom", label: "커스텀" },
-];
 
 const COUNT_BASES: ReadonlySet<BaseId> = new Set(["hours", "students"]);
 const OPS_NEEDING_AUX: ReadonlySet<RuleItem["op"]> = new Set([
@@ -76,28 +58,47 @@ function SectionBadges({
     .filter((c): c is NonNullable<typeof c> => Boolean(c));
   if (selected.length === 0) return null;
 
-  const sections = Array.from(
-    new Set(selected.map((c) => c.section || "(분반 없음)")),
-  );
+  // {kind|section} 튜플로 dedupe — 같은 section 라벨이라도 kind가 다르면 별도 뱃지.
+  type Badge = { key: string; label: string; kind: ClassKind | "missing" };
+  const seen = new Set<string>();
+  const badges: Badge[] = [];
+  for (const c of selected) {
+    const isMissing = !c.section;
+    const label = c.section || "(분반 없음)";
+    const kind: ClassKind | "missing" = isMissing ? "missing" : c.kind;
+    const key = `${kind}|${label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    badges.push({ key, label, kind });
+  }
+
+  // kind 별 색상 (보충비=초록, 일반 수업=파랑, synthetic=노랑, 분반 없음=회색)
+  function colorsFor(kind: Badge["kind"]): { bg: string; fg: string } {
+    switch (kind) {
+      case "bochungbi":
+        return { bg: "var(--aca-green-light)", fg: "var(--aca-green)" };
+      case "synthetic":
+        return { bg: "var(--aca-yellow-10)", fg: "var(--aca-yellow-primary)" };
+      case "missing":
+        return { bg: "var(--aca-gray-50)", fg: "var(--aca-gray-500)" };
+      case "sueop":
+      default:
+        return { bg: "var(--aca-blue-100)", fg: "var(--aca-blue-primary)" };
+    }
+  }
 
   return (
     <span className="ml-1.5 inline-flex flex-wrap items-center gap-1 align-middle">
-      {sections.map((s) => {
-        const isMissing = s === "(분반 없음)";
+      {badges.map((b) => {
+        const { bg, fg } = colorsFor(b.kind);
         return (
           <span
-            key={s}
+            key={b.key}
             className="inline-flex items-center rounded-[3px] px-1.5 py-[1px] text-[10.5px] font-semibold leading-[1.3]"
-            style={{
-              background: isMissing
-                ? "var(--aca-gray-50)"
-                : "var(--aca-blue-100)",
-              color: isMissing
-                ? "var(--aca-gray-500)"
-                : "var(--aca-blue-primary)",
-            }}
+            style={{ background: bg, color: fg }}
+            title={b.kind === "bochungbi" ? "보충비" : undefined}
           >
-            {s}
+            {b.label}
           </span>
         );
       })}
@@ -220,8 +221,21 @@ interface RowProps {
   selected: boolean;
   valueCellSelected: boolean;
   customBaseCellSelected: boolean;
+  taxableCellSelected: boolean;
+  baseCellSelected: boolean;
+  opCellSelected: boolean;
   /** 다른 rule과 수업 중복이 있으면 true. */
   hasDuplicateClass: boolean;
+  /** 행 재정렬 DnD. */
+  onRowDragStart: () => void;
+  onRowDragOver: () => void;
+  onRowDrop: () => void;
+  onRowDragEnd: () => void;
+  isDragging: boolean;
+  isDragOver: boolean;
+  /** 세금 셀의 drag-paint 토글: mousedown/enter에서 호출. */
+  onTaxPaintStart: () => void;
+  onTaxPaintEnter: () => void;
   onToggle: () => void;
   onAuxChange: (value: string) => void;
   onCustomBaseChange: (value: string) => void;
@@ -238,7 +252,18 @@ function ItemRow({
   selected,
   valueCellSelected,
   customBaseCellSelected,
+  taxableCellSelected,
+  baseCellSelected,
+  opCellSelected,
   hasDuplicateClass,
+  onRowDragStart,
+  onRowDragOver,
+  onRowDrop,
+  onRowDragEnd,
+  isDragging,
+  isDragOver,
+  onTaxPaintStart,
+  onTaxPaintEnter,
   onToggle,
   onAuxChange,
   onCustomBaseChange,
@@ -254,12 +279,13 @@ function ItemRow({
 
   let baseCell: React.ReactNode;
   if (rule.cat === "revenue") {
+    const agg = calculator.getClassAggregate(teacherId, rule.classIds);
     if (rule.base === "direct") {
       baseCell = (
         <>
-          <MiniDropdown<BaseId>
+          <BaseValuePopover
             value={rule.base}
-            options={BASE_OPTIONS}
+            agg={agg}
             onChange={onBaseChange}
           />
           <div className="mt-1">
@@ -274,19 +300,19 @@ function ItemRow({
         </>
       );
     } else {
-      const agg = calculator.getClassAggregate(teacherId, rule.classIds);
       const baseVal = baseValueOf(rule.base, agg);
       const isCount = COUNT_BASES.has(rule.base);
       baseCell = (
         <>
-          <MiniDropdown<BaseId>
+          <BaseValuePopover
             value={rule.base}
-            options={BASE_OPTIONS}
+            agg={agg}
             onChange={onBaseChange}
           />
           <div
-            className="jb2-tnum mt-1 text-[11px]"
+            className="jb2-tnum mt-0.5 truncate text-[10px] whitespace-nowrap"
             style={{ color: "var(--aca-gray-400)" }}
+            title={isCount ? baseVal.toLocaleString() : formatKRW(baseVal)}
           >
             = {isCount ? baseVal.toLocaleString() : formatKRW(baseVal)}
           </div>
@@ -307,15 +333,51 @@ function ItemRow({
 
   return (
     <tr
-      style={{
-        background: selected ? "#FBFAF4" : "var(--aca-white)",
+      // <tr> 자체는 draggable=false. 재정렬은 grip 핸들(span)이 소스가 되고
+      // <tr>은 drop 타겟 역할(onDragOver/onDrop)만 담당 — 셀 드래그 선택과 충돌 방지.
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onRowDragOver();
       }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onRowDrop();
+      }}
+      className={`${
+        selected ? "bg-[#FBFAF4]" : "bg-[var(--aca-white)]"
+      } ${isDragging ? "opacity-40" : ""}`}
+      style={
+        isDragOver
+          ? { boxShadow: "inset 0 2px 0 var(--aca-blue-primary)" }
+          : undefined
+      }
     >
       <td
         className="w-[34px] pt-3.5 pb-3 pr-2 pl-4 align-top"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <MiniCheckbox checked={selected} onChange={onToggle} color="#2BB673" />
+        <div className="flex items-center gap-1">
+          <span
+            aria-label="행 끌어서 순서 변경"
+            title="행 끌어서 순서 변경"
+            className="inline-flex cursor-grab items-center text-[var(--aca-gray-400)]"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              try {
+                e.dataTransfer.setData("text/plain", rule.id);
+              } catch {
+                /* noop */
+              }
+              onRowDragStart();
+            }}
+            onDragEnd={onRowDragEnd}
+          >
+            <GripVertical className="size-3.5" />
+          </span>
+          <MiniCheckbox checked={selected} onChange={onToggle} color="#2BB673" />
+        </div>
       </td>
       <td className="w-[50px] px-1.5 py-3 align-top">
         <RoundTag label={String(ordinal)} />
@@ -352,27 +414,34 @@ function ItemRow({
         )}
       </td>
       <td
-        className="w-[170px] px-1.5 py-3 align-top"
-        onMouseDown={(e) => {
-          // revenue 행은 dropdown(베이스값 선택) → wrapper에 mousedown 전파 시
-          // selection이 비워질 수 있어 stopPropagation. 단 customBase MiniInput 셀이
-          // 있는 direct 모드에서는 wrapper의 셀 selection 로직이 처리하도록 통과시킨다.
-          if (rule.cat === "revenue" && rule.base !== "direct") {
-            e.stopPropagation();
-          }
-        }}
+        className="w-[80px] px-1.5 py-3 align-top"
+        data-cell-id={rule.cat === "revenue" ? rule.id : undefined}
+        data-cell-col={rule.cat === "revenue" ? "base" : undefined}
+        style={
+          baseCellSelected
+            ? {
+                outline: "2px solid var(--aca-blue-primary)",
+                outlineOffset: "-2px",
+              }
+            : undefined
+        }
       >
         {baseCell}
       </td>
       <td
         className="w-[110px] px-1.5 py-3 align-top"
-        onMouseDown={(e) => e.stopPropagation()}
+        data-cell-id={rule.id}
+        data-cell-col="op"
+        style={
+          opCellSelected
+            ? {
+                outline: "2px solid var(--aca-blue-primary)",
+                outlineOffset: "-2px",
+              }
+            : undefined
+        }
       >
-        <MiniDropdown<RuleItem["op"]>
-          value={rule.op}
-          options={OP_OPTIONS}
-          onChange={onOpChange}
-        />
+        <OpDropdown value={rule.op} onChange={onOpChange} />
       </td>
       <td className="w-[90px] px-1.5 py-3 align-top">
         {auxNeeded ? (
@@ -391,7 +460,28 @@ function ItemRow({
       </td>
       <td
         className="w-[50px] align-middle"
-        onMouseDown={(e) => e.stopPropagation()}
+        data-cell-id={rule.id}
+        data-cell-col="taxable"
+        style={
+          taxableCellSelected
+            ? {
+                outline: "2px solid var(--aca-blue-primary)",
+                outlineOffset: "-2px",
+              }
+            : undefined
+        }
+        onMouseDown={(e) => {
+          // 셀 사각 선택은 wrapper에서 이미 처리됨. 여기서 추가로 "drag-paint 토글"
+          // 를 시작한다 (단순 클릭이면 mouseup에서 종료).
+          if (e.button !== 0) return;
+          onTaxPaintStart();
+        }}
+        onMouseEnter={(e) => {
+          // 왼쪽 버튼을 누른 채로 다른 tax 셀로 들어오면 같은 값으로 칠한다.
+          if ((e.buttons & 1) === 1) {
+            onTaxPaintEnter();
+          }
+        }}
       >
         <div className="flex items-center justify-center">
           <MiniCheckbox checked={rule.taxable} onChange={onTaxChange} color="#2BB673" />
@@ -453,10 +543,26 @@ export function SettlementItemTable() {
   const activeTeacherId = useBuilderStore((s) => s.activeTeacherId);
   const selectedRuleIdsMap = useBuilderStore((s) => s.selectedRuleIds);
   const toggleRuleSelection = useBuilderStore((s) => s.toggleRuleSelection);
+  const selectAllRules = useBuilderStore((s) => s.selectAllRules);
+  const clearRuleSelection = useBuilderStore((s) => s.clearRuleSelection);
   const updateRule = useBuilderStore((s) => s.updateRule);
   const setRuleTaxable = useBuilderStore((s) => s.setRuleTaxable);
+  const bulkSetRuleTaxable = useBuilderStore((s) => s.bulkSetRuleTaxable);
+  const bulkSetRuleBase = useBuilderStore((s) => s.bulkSetRuleBase);
+  const bulkSetRuleOp = useBuilderStore((s) => s.bulkSetRuleOp);
   const bulkSetAux = useBuilderStore((s) => s.bulkSetAux);
   const bulkSetCustomBase = useBuilderStore((s) => s.bulkSetCustomBase);
+  const moveRule = useBuilderStore((s) => s.moveRule);
+
+  // 행 DnD 로컬 상태
+  const [draggingRuleId, setDraggingRuleId] = useState<string | null>(null);
+  const [dragOverRuleId, setDragOverRuleId] = useState<string | null>(null);
+
+  // 세금 drag-paint 로컬 상태: 드래그 동안 적용할 newValue + 이미 토글한 ruleId 집합.
+  const taxPaintRef = useRef<{
+    newValue: boolean;
+    applied: Set<string>;
+  } | null>(null);
 
   const rules = useMemo(
     () =>
@@ -468,14 +574,18 @@ export function SettlementItemTable() {
   const orderedRuleIds = useMemo(() => rules.map((r) => r.id), [rules]);
 
   // ruleId → 드래그 가능한 컬럼 집합.
-  //   - customBase는 plus/minus 또는 revenue+direct에서만 활성
-  //   - value는 op이 aux를 필요로 할 때만 활성
+  //   - customBase: plus/minus 또는 revenue+direct
+  //   - value: op이 aux를 필요로 할 때
+  //   - taxable: 모든 rule에서 활성 (drag-select 시각 표시용)
   const draggable = useMemo<DraggableMap>(() => {
     const map = new Map<string, Set<CellCol>>();
     for (const r of rules) {
       const cols = new Set<CellCol>();
+      if (r.cat === "revenue") cols.add("base");
+      cols.add("op");
       if (r.cat !== "revenue" || r.base === "direct") cols.add("customBase");
       if (OPS_NEEDING_AUX.has(r.op)) cols.add("value");
+      cols.add("taxable");
       map.set(r.id, cols);
     }
     return { get: (id) => map.get(id) };
@@ -509,6 +619,121 @@ export function SettlementItemTable() {
   const selectedRuleIds =
     selectedRuleIdsMap[activeTeacherId] ?? new Set<string>();
 
+  const allSelected =
+    rules.length > 0 && selectedRuleIds.size === rules.length;
+  const someSelected =
+    selectedRuleIds.size > 0 && selectedRuleIds.size < rules.length;
+
+  function handleToggleSelectAll() {
+    if (!activeTeacherId) return;
+    if (allSelected) clearRuleSelection(activeTeacherId);
+    else selectAllRules(activeTeacherId);
+  }
+
+  /** 행 재정렬 DnD 핸들러 */
+  function handleRowDragStart(ruleId: string) {
+    setDraggingRuleId(ruleId);
+  }
+  function handleRowDragOver(ruleId: string) {
+    if (draggingRuleId && draggingRuleId !== ruleId) {
+      setDragOverRuleId(ruleId);
+    }
+  }
+  function handleRowDrop(targetRuleId: string) {
+    if (!activeTeacherId) {
+      setDraggingRuleId(null);
+      setDragOverRuleId(null);
+      return;
+    }
+    if (draggingRuleId && draggingRuleId !== targetRuleId) {
+      const toIndex = rules.findIndex((r) => r.id === targetRuleId);
+      if (toIndex >= 0) {
+        moveRule(activeTeacherId, draggingRuleId, toIndex);
+      }
+    }
+    setDraggingRuleId(null);
+    setDragOverRuleId(null);
+  }
+  function handleRowDragEnd() {
+    setDraggingRuleId(null);
+    setDragOverRuleId(null);
+  }
+
+  /**
+   * 세금 셀 drag-paint. mousedown 시작 → 해당 rule을 반전값으로 토글하고
+   * "이 drag 동안 칠할 값(newValue)"를 기록. 이후 다른 tax 셀로 enter할 때마다
+   * 같은 newValue로 set. 이미 칠한 rule은 재방문해도 건드리지 않는다.
+   */
+  function handleTaxPaintStart(ruleId: string) {
+    if (!activeTeacherId) return;
+    const rule = rules.find((r) => r.id === ruleId);
+    if (!rule) return;
+    const newValue = !rule.taxable;
+    taxPaintRef.current = { newValue, applied: new Set([ruleId]) };
+
+    // drag-select로 여러 tax 셀이 선택된 상태라면 그 전체에 일괄 적용.
+    const key = `${ruleId}|taxable`;
+    if (
+      cellSel.selectedKeys.has(key) &&
+      Array.from(cellSel.selectedKeys).some((k) => k.endsWith("|taxable") && k !== key)
+    ) {
+      const taxIds: string[] = [];
+      for (const k of cellSel.selectedKeys) {
+        if (k.endsWith("|taxable")) {
+          const [rId] = k.split("|");
+          taxIds.push(rId);
+          taxPaintRef.current.applied.add(rId);
+        }
+      }
+      bulkSetRuleTaxable(activeTeacherId, taxIds, newValue);
+      return;
+    }
+    setRuleTaxable(activeTeacherId, ruleId, newValue);
+  }
+
+  function handleTaxPaintEnter(ruleId: string) {
+    if (!activeTeacherId || !taxPaintRef.current) return;
+    if (taxPaintRef.current.applied.has(ruleId)) return;
+    taxPaintRef.current.applied.add(ruleId);
+    setRuleTaxable(activeTeacherId, ruleId, taxPaintRef.current.newValue);
+  }
+
+  /**
+   * 베이스값 변경. 이 rule의 base 셀이 다중 선택의 일부이면 bulk 적용.
+   * (revenue rule에 한정 — calculator.bulkSetBase가 내부 필터링)
+   */
+  function handleBaseChange(ruleId: string, next: BaseId) {
+    if (!activeTeacherId) return;
+    const key = `${ruleId}|base`;
+    if (cellSel.selectedKeys.has(key) && cellSel.selectedKeys.size > 1) {
+      const ids: string[] = [];
+      for (const k of cellSel.selectedKeys) {
+        if (k.endsWith("|base")) ids.push(k.split("|")[0]);
+      }
+      if (ids.length > 1) {
+        bulkSetRuleBase(activeTeacherId, ids, next);
+        return;
+      }
+    }
+    updateRule(activeTeacherId, ruleId, { base: next });
+  }
+
+  function handleOpChange(ruleId: string, next: RuleItem["op"]) {
+    if (!activeTeacherId) return;
+    const key = `${ruleId}|op`;
+    if (cellSel.selectedKeys.has(key) && cellSel.selectedKeys.size > 1) {
+      const ids: string[] = [];
+      for (const k of cellSel.selectedKeys) {
+        if (k.endsWith("|op")) ids.push(k.split("|")[0]);
+      }
+      if (ids.length > 1) {
+        bulkSetRuleOp(activeTeacherId, ids, next);
+        return;
+      }
+    }
+    updateRule(activeTeacherId, ruleId, { op: next });
+  }
+
   /**
    * 셀 input 변경 시 호출. 현재 cell이 다중 선택의 일부면 column별로 모아 bulk 적용.
    * 아니면 단일 rule만 update.
@@ -538,10 +763,23 @@ export function SettlementItemTable() {
     }
   }
 
+  // cellSel.wrapperProps의 onMouseUp을 가로채 tax paint 종료까지 처리.
+  const wrapperProps = {
+    ...cellSel.wrapperProps,
+    onMouseUp: () => {
+      cellSel.wrapperProps.onMouseUp();
+      taxPaintRef.current = null;
+    },
+    onMouseLeave: () => {
+      cellSel.wrapperProps.onMouseLeave();
+      taxPaintRef.current = null;
+    },
+  };
+
   return (
     <div
       className="flex-1 select-none overflow-auto bg-[var(--aca-white)]"
-      {...cellSel.wrapperProps}
+      {...wrapperProps}
     >
       <table className="jb2-tnum jb2-rule-table w-full border-separate border-spacing-0">
         <thead>
@@ -555,8 +793,21 @@ export function SettlementItemTable() {
                 <th
                   key={h || `col-${i}`}
                   className={`border-b border-[var(--aca-gray-200)] py-2.5 text-[11px] font-semibold tracking-[0.2px] text-[var(--aca-gray-500)] ${alignClass} ${padLeftClass} ${padRightClass}`}
+                  onMouseDown={
+                    i === 0 ? (e) => e.stopPropagation() : undefined
+                  }
                 >
-                  {h}
+                  {i === 0 && rules.length > 0 ? (
+                    <MiniCheckbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={handleToggleSelectAll}
+                      color="#2BB673"
+                      ariaLabel="전체 선택"
+                    />
+                  ) : (
+                    h
+                  )}
                 </th>
               );
             })}
@@ -586,9 +837,22 @@ export function SettlementItemTable() {
                   rule.id,
                   "customBase",
                 )}
+                taxableCellSelected={cellSel.isSelected(rule.id, "taxable")}
+                baseCellSelected={cellSel.isSelected(rule.id, "base")}
+                opCellSelected={cellSel.isSelected(rule.id, "op")}
                 hasDuplicateClass={rule.classIds.some((cid) =>
                   duplicateClassIds.has(cid),
                 )}
+                isDragging={draggingRuleId === rule.id}
+                isDragOver={
+                  dragOverRuleId === rule.id && draggingRuleId !== rule.id
+                }
+                onRowDragStart={() => handleRowDragStart(rule.id)}
+                onRowDragOver={() => handleRowDragOver(rule.id)}
+                onRowDrop={() => handleRowDrop(rule.id)}
+                onRowDragEnd={handleRowDragEnd}
+                onTaxPaintStart={() => handleTaxPaintStart(rule.id)}
+                onTaxPaintEnter={() => handleTaxPaintEnter(rule.id)}
                 onToggle={() => toggleRuleSelection(activeTeacherId, rule.id)}
                 onAuxChange={(raw) => {
                   const trimmed = raw.trim();
@@ -609,12 +873,8 @@ export function SettlementItemTable() {
                 onTaxChange={(next) =>
                   setRuleTaxable(activeTeacherId, rule.id, next)
                 }
-                onBaseChange={(next) =>
-                  updateRule(activeTeacherId, rule.id, { base: next })
-                }
-                onOpChange={(next) =>
-                  updateRule(activeTeacherId, rule.id, { op: next })
-                }
+                onBaseChange={(next) => handleBaseChange(rule.id, next)}
+                onOpChange={(next) => handleOpChange(rule.id, next)}
               />
             ))
           )}
