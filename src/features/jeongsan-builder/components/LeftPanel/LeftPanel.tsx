@@ -151,7 +151,11 @@ export function LeftPanel() {
               </div>
             ) : (
               <>
-                <DropZone onClick={triggerFilePick} />
+                <DropZone
+                  onClick={triggerFilePick}
+                  onFileDrop={(file) => setPendingFile(file)}
+                  disabled={isParsing}
+                />
                 {isParsing ? (
                   <div className="mt-2.5 rounded-md border border-[var(--aca-blue-200)] bg-[var(--aca-blue-10)] px-3 py-2.5 text-xs text-[var(--aca-blue-primary)]">
                     페이 문서를 분석하는 중...

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, GripVertical } from "lucide-react";
 
 import { BaseValuePopover } from "@/features/jeongsan-builder/components/CenterPanel/BaseValuePopover";
@@ -221,11 +221,13 @@ interface RowProps {
   selected: boolean;
   valueCellSelected: boolean;
   customBaseCellSelected: boolean;
-  taxableCellSelected: boolean;
   baseCellSelected: boolean;
   opCellSelected: boolean;
   /** 다른 rule과 수업 중복이 있으면 true. */
   hasDuplicateClass: boolean;
+  /** 그룹 편집 미리보기 — 같은 컬럼의 다른 셀이 편집 중일 때 broadcast된 raw 값. */
+  valueGroupDraft?: string;
+  customBaseGroupDraft?: string;
   /** 행 재정렬 DnD. */
   onRowDragStart: () => void;
   onRowDragOver: () => void;
@@ -233,15 +235,17 @@ interface RowProps {
   onRowDragEnd: () => void;
   isDragging: boolean;
   isDragOver: boolean;
-  /** 세금 셀의 drag-paint 토글: mousedown/enter에서 호출. */
-  onTaxPaintStart: () => void;
-  onTaxPaintEnter: () => void;
   onToggle: () => void;
   onAuxChange: (value: string) => void;
   onCustomBaseChange: (value: string) => void;
   onTaxChange: (next: boolean) => void;
   onBaseChange: (next: BaseId) => void;
   onOpChange: (next: RuleItem["op"]) => void;
+  /** 본 셀의 편집 시작/종료를 부모에 알림. */
+  onValueEditingChange: (editing: boolean) => void;
+  onValueDraftChange: (draft: string) => void;
+  onCustomBaseEditingChange: (editing: boolean) => void;
+  onCustomBaseDraftChange: (draft: string) => void;
 }
 
 function ItemRow({
@@ -252,24 +256,27 @@ function ItemRow({
   selected,
   valueCellSelected,
   customBaseCellSelected,
-  taxableCellSelected,
   baseCellSelected,
   opCellSelected,
   hasDuplicateClass,
+  valueGroupDraft,
+  customBaseGroupDraft,
   onRowDragStart,
   onRowDragOver,
   onRowDrop,
   onRowDragEnd,
   isDragging,
   isDragOver,
-  onTaxPaintStart,
-  onTaxPaintEnter,
   onToggle,
   onAuxChange,
   onCustomBaseChange,
   onTaxChange,
   onBaseChange,
   onOpChange,
+  onValueEditingChange,
+  onValueDraftChange,
+  onCustomBaseEditingChange,
+  onCustomBaseDraftChange,
 }: RowProps) {
   const ruleResult = calculator.getRuleResult(teacherId, rule.id);
   const result = ruleResult?.result ?? 0;
@@ -295,6 +302,9 @@ function ItemRow({
               cellId={rule.id}
               cellCol="customBase"
               cellSelected={customBaseCellSelected}
+              groupDraft={customBaseGroupDraft}
+              onEditingChange={onCustomBaseEditingChange}
+              onDraftChange={onCustomBaseDraftChange}
             />
           </div>
         </>
@@ -327,6 +337,9 @@ function ItemRow({
         cellId={rule.id}
         cellCol="customBase"
         cellSelected={customBaseCellSelected}
+        groupDraft={customBaseGroupDraft}
+        onEditingChange={onCustomBaseEditingChange}
+        onDraftChange={onCustomBaseDraftChange}
       />
     );
   }
@@ -451,6 +464,9 @@ function ItemRow({
             cellId={rule.id}
             cellCol="value"
             cellSelected={valueCellSelected}
+            groupDraft={valueGroupDraft}
+            onEditingChange={onValueEditingChange}
+            onDraftChange={onValueDraftChange}
           />
         ) : (
           <div className="flex h-7 items-center justify-center text-xs text-[var(--aca-gray-300)]">
@@ -459,29 +475,8 @@ function ItemRow({
         )}
       </td>
       <td
-        className="w-[50px] align-middle"
-        data-cell-id={rule.id}
-        data-cell-col="taxable"
-        style={
-          taxableCellSelected
-            ? {
-                outline: "2px solid var(--aca-blue-primary)",
-                outlineOffset: "-2px",
-              }
-            : undefined
-        }
-        onMouseDown={(e) => {
-          // 셀 사각 선택은 wrapper에서 이미 처리됨. 여기서 추가로 "drag-paint 토글"
-          // 를 시작한다 (단순 클릭이면 mouseup에서 종료).
-          if (e.button !== 0) return;
-          onTaxPaintStart();
-        }}
-        onMouseEnter={(e) => {
-          // 왼쪽 버튼을 누른 채로 다른 tax 셀로 들어오면 같은 값으로 칠한다.
-          if ((e.buttons & 1) === 1) {
-            onTaxPaintEnter();
-          }
-        }}
+        className="w-[64px] px-1.5 align-middle"
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-center">
           <MiniCheckbox checked={rule.taxable} onChange={onTaxChange} color="#2BB673" />
@@ -558,10 +553,13 @@ export function SettlementItemTable() {
   const [draggingRuleId, setDraggingRuleId] = useState<string | null>(null);
   const [dragOverRuleId, setDragOverRuleId] = useState<string | null>(null);
 
-  // 세금 drag-paint 로컬 상태: 드래그 동안 적용할 newValue + 이미 토글한 ruleId 집합.
-  const taxPaintRef = useRef<{
-    newValue: boolean;
-    applied: Set<string>;
+  // 그룹 편집 broadcast 상태: 다중 선택된 input 셀 중 한 곳에서 편집이 시작되면
+  // 입력 raw 값을 같은 컬럼의 다른 선택 셀들에도 미리보기로 표시하기 위한 상태.
+  // editorKey: `${ruleId}|${col}` (편집 주체 셀), draft: 현재 raw 값.
+  const [groupEdit, setGroupEdit] = useState<{
+    editorRuleId: string;
+    col: "value" | "customBase";
+    draft: string;
   } | null>(null);
 
   const rules = useMemo(
@@ -576,7 +574,6 @@ export function SettlementItemTable() {
   // ruleId → 드래그 가능한 컬럼 집합.
   //   - customBase: plus/minus 또는 revenue+direct
   //   - value: op이 aux를 필요로 할 때
-  //   - taxable: 모든 rule에서 활성 (drag-select 시각 표시용)
   const draggable = useMemo<DraggableMap>(() => {
     const map = new Map<string, Set<CellCol>>();
     for (const r of rules) {
@@ -585,7 +582,6 @@ export function SettlementItemTable() {
       cols.add("op");
       if (r.cat !== "revenue" || r.base === "direct") cols.add("customBase");
       if (OPS_NEEDING_AUX.has(r.op)) cols.add("value");
-      cols.add("taxable");
       map.set(r.id, cols);
     }
     return { get: (id) => map.get(id) };
@@ -614,6 +610,20 @@ export function SettlementItemTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTeacherId]);
 
+  // 그룹 편집 broadcast가 활성일 때, 같은 컬럼의 다른 선택 셀이 미리보기로 표시할 ruleId 집합을 계산.
+  // 편집 주체(editorRuleId) 자신은 제외 — 본인은 자체 draft를 사용한다.
+  const groupBroadcastIds = useMemo<ReadonlySet<string>>(() => {
+    if (!groupEdit) return new Set<string>();
+    const editorKey = `${groupEdit.editorRuleId}|${groupEdit.col}`;
+    if (!cellSel.selectedKeys.has(editorKey)) return new Set<string>();
+    const ids = new Set<string>();
+    for (const k of cellSel.selectedKeys) {
+      const [rId, c] = k.split("|");
+      if (c === groupEdit.col && rId !== groupEdit.editorRuleId) ids.add(rId);
+    }
+    return ids;
+  }, [groupEdit, cellSel.selectedKeys]);
+
   if (!calculator || !activeTeacherId) return null;
 
   const selectedRuleIds =
@@ -623,6 +633,10 @@ export function SettlementItemTable() {
     rules.length > 0 && selectedRuleIds.size === rules.length;
   const someSelected =
     selectedRuleIds.size > 0 && selectedRuleIds.size < rules.length;
+
+  const taxableCount = rules.reduce((n, r) => n + (r.taxable ? 1 : 0), 0);
+  const allTaxable = rules.length > 0 && taxableCount === rules.length;
+  const someTaxable = taxableCount > 0 && taxableCount < rules.length;
 
   function handleToggleSelectAll() {
     if (!activeTeacherId) return;
@@ -660,42 +674,16 @@ export function SettlementItemTable() {
   }
 
   /**
-   * 세금 셀 drag-paint. mousedown 시작 → 해당 rule을 반전값으로 토글하고
-   * "이 drag 동안 칠할 값(newValue)"를 기록. 이후 다른 tax 셀로 enter할 때마다
-   * 같은 newValue로 set. 이미 칠한 rule은 재방문해도 건드리지 않는다.
+   * 헤더의 세금 일괄 토글: 모든 rule이 과세면 일괄 해제, 아니면 일괄 과세.
    */
-  function handleTaxPaintStart(ruleId: string) {
-    if (!activeTeacherId) return;
-    const rule = rules.find((r) => r.id === ruleId);
-    if (!rule) return;
-    const newValue = !rule.taxable;
-    taxPaintRef.current = { newValue, applied: new Set([ruleId]) };
-
-    // drag-select로 여러 tax 셀이 선택된 상태라면 그 전체에 일괄 적용.
-    const key = `${ruleId}|taxable`;
-    if (
-      cellSel.selectedKeys.has(key) &&
-      Array.from(cellSel.selectedKeys).some((k) => k.endsWith("|taxable") && k !== key)
-    ) {
-      const taxIds: string[] = [];
-      for (const k of cellSel.selectedKeys) {
-        if (k.endsWith("|taxable")) {
-          const [rId] = k.split("|");
-          taxIds.push(rId);
-          taxPaintRef.current.applied.add(rId);
-        }
-      }
-      bulkSetRuleTaxable(activeTeacherId, taxIds, newValue);
-      return;
-    }
-    setRuleTaxable(activeTeacherId, ruleId, newValue);
-  }
-
-  function handleTaxPaintEnter(ruleId: string) {
-    if (!activeTeacherId || !taxPaintRef.current) return;
-    if (taxPaintRef.current.applied.has(ruleId)) return;
-    taxPaintRef.current.applied.add(ruleId);
-    setRuleTaxable(activeTeacherId, ruleId, taxPaintRef.current.newValue);
+  function handleToggleAllTaxable() {
+    if (!activeTeacherId || rules.length === 0) return;
+    const allTaxable = rules.every((r) => r.taxable);
+    bulkSetRuleTaxable(
+      activeTeacherId,
+      rules.map((r) => r.id),
+      !allTaxable,
+    );
   }
 
   /**
@@ -763,18 +751,40 @@ export function SettlementItemTable() {
     }
   }
 
-  // cellSel.wrapperProps의 onMouseUp을 가로채 tax paint 종료까지 처리.
-  const wrapperProps = {
-    ...cellSel.wrapperProps,
-    onMouseUp: () => {
-      cellSel.wrapperProps.onMouseUp();
-      taxPaintRef.current = null;
-    },
-    onMouseLeave: () => {
-      cellSel.wrapperProps.onMouseLeave();
-      taxPaintRef.current = null;
-    },
-  };
+  const wrapperProps = cellSel.wrapperProps;
+
+  // 편집 종료 시점에만 groupEdit을 비운다. 편집 시작 시점엔 broadcast를 시작하지 않는다 —
+  // 사용자가 실제 입력을 하기 전까지(첫 onDraftChange) 다른 셀의 표시값을 비워서는 안 되기 때문.
+  function handleValueEditingChange(ruleId: string, editing: boolean) {
+    if (!editing) {
+      setGroupEdit((prev) =>
+        prev?.editorRuleId === ruleId && prev.col === "value" ? null : prev,
+      );
+    }
+  }
+  function handleValueDraftChange(ruleId: string, draft: string) {
+    setGroupEdit((prev) =>
+      prev?.editorRuleId === ruleId && prev.col === "value"
+        ? { ...prev, draft }
+        : { editorRuleId: ruleId, col: "value", draft },
+    );
+  }
+  function handleCustomBaseEditingChange(ruleId: string, editing: boolean) {
+    if (!editing) {
+      setGroupEdit((prev) =>
+        prev?.editorRuleId === ruleId && prev.col === "customBase"
+          ? null
+          : prev,
+      );
+    }
+  }
+  function handleCustomBaseDraftChange(ruleId: string, draft: string) {
+    setGroupEdit((prev) =>
+      prev?.editorRuleId === ruleId && prev.col === "customBase"
+        ? { ...prev, draft }
+        : { editorRuleId: ruleId, col: "customBase", draft },
+    );
+  }
 
   return (
     <div
@@ -787,14 +797,15 @@ export function SettlementItemTable() {
             {COLUMNS.map((h, i) => {
               const alignClass =
                 i >= 9 ? "text-right" : i === 7 ? "text-center" : "text-left";
-              const padLeftClass = i === 0 ? "pl-4" : "pl-2";
-              const padRightClass = i === 9 ? "pr-4" : "pr-2";
+              const padLeftClass = i === 0 ? "pl-4" : i === 7 ? "pl-1.5" : "pl-2";
+              const padRightClass = i === 9 ? "pr-4" : i === 7 ? "pr-1.5" : "pr-2";
+              const isInteractiveHeader = i === 0 || i === 7;
               return (
                 <th
                   key={h || `col-${i}`}
                   className={`border-b border-[var(--aca-gray-200)] py-2.5 text-[11px] font-semibold tracking-[0.2px] text-[var(--aca-gray-500)] ${alignClass} ${padLeftClass} ${padRightClass}`}
                   onMouseDown={
-                    i === 0 ? (e) => e.stopPropagation() : undefined
+                    isInteractiveHeader ? (e) => e.stopPropagation() : undefined
                   }
                 >
                   {i === 0 && rules.length > 0 ? (
@@ -805,6 +816,17 @@ export function SettlementItemTable() {
                       color="#2BB673"
                       ariaLabel="전체 선택"
                     />
+                  ) : i === 7 && rules.length > 0 ? (
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      <span>{h}</span>
+                      <MiniCheckbox
+                        checked={allTaxable}
+                        indeterminate={someTaxable}
+                        onChange={handleToggleAllTaxable}
+                        color="#2BB673"
+                        ariaLabel="세금 전체 선택"
+                      />
+                    </span>
                   ) : (
                     h
                   )}
@@ -837,12 +859,35 @@ export function SettlementItemTable() {
                   rule.id,
                   "customBase",
                 )}
-                taxableCellSelected={cellSel.isSelected(rule.id, "taxable")}
                 baseCellSelected={cellSel.isSelected(rule.id, "base")}
                 opCellSelected={cellSel.isSelected(rule.id, "op")}
                 hasDuplicateClass={rule.classIds.some((cid) =>
                   duplicateClassIds.has(cid),
                 )}
+                valueGroupDraft={
+                  groupEdit?.col === "value" &&
+                  groupBroadcastIds.has(rule.id)
+                    ? groupEdit.draft
+                    : undefined
+                }
+                customBaseGroupDraft={
+                  groupEdit?.col === "customBase" &&
+                  groupBroadcastIds.has(rule.id)
+                    ? groupEdit.draft
+                    : undefined
+                }
+                onValueEditingChange={(editing) =>
+                  handleValueEditingChange(rule.id, editing)
+                }
+                onValueDraftChange={(draft) =>
+                  handleValueDraftChange(rule.id, draft)
+                }
+                onCustomBaseEditingChange={(editing) =>
+                  handleCustomBaseEditingChange(rule.id, editing)
+                }
+                onCustomBaseDraftChange={(draft) =>
+                  handleCustomBaseDraftChange(rule.id, draft)
+                }
                 isDragging={draggingRuleId === rule.id}
                 isDragOver={
                   dragOverRuleId === rule.id && draggingRuleId !== rule.id
@@ -851,8 +896,6 @@ export function SettlementItemTable() {
                 onRowDragOver={() => handleRowDragOver(rule.id)}
                 onRowDrop={() => handleRowDrop(rule.id)}
                 onRowDragEnd={handleRowDragEnd}
-                onTaxPaintStart={() => handleTaxPaintStart(rule.id)}
-                onTaxPaintEnter={() => handleTaxPaintEnter(rule.id)}
                 onToggle={() => toggleRuleSelection(activeTeacherId, rule.id)}
                 onAuxChange={(raw) => {
                   const trimmed = raw.trim();
