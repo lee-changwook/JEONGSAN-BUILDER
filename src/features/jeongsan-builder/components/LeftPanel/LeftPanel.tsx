@@ -100,9 +100,9 @@ export function LeftPanel() {
             done={uploaded}
           />
           <StepConnector done={uploaded} />
-          <StepIndicator label="전월 강사 지급액 파일 업로드" />
+          <StepIndicator label="전월 강사 지급액 파일 업로드(개발 예정)" />
           <StepConnector />
-          <StepIndicator label="정산 데이터 생성" active={uploaded} />
+          <StepIndicator label="정산 데이터 만들기" active={uploaded} />
         </div>
 
         <div className="flex flex-col gap-[18px]">
@@ -171,7 +171,7 @@ export function LeftPanel() {
           </PanelSection>
 
           <PanelSection
-            title="전월 강사 지급액 파일 업로드"
+            title="전월 강사 지급액 파일 업로드(개발 예정)"
             subtitle={
               <>
                 전월 강사지급액이 있으면 넣어주세요.
@@ -179,7 +179,7 @@ export function LeftPanel() {
                 비율을 자동으로 입력합니다.
               </>
             }
-            muted={!uploaded}
+            muted
           >
             {prevPayoutFile ? (
               <div className="flex items-center gap-2.5 rounded-md border border-[var(--aca-gray-100)] bg-[var(--aca-gray-10)] px-3 py-2.5">
