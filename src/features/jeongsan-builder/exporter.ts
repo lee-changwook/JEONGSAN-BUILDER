@@ -106,14 +106,13 @@ const RULE_HEADERS = [
   "전월 회수액",
   "이번달 납부액",
   "베이스값 종류",
-  "베이스값",
   "OPERATION",
   "보조값",
   "세액",
   "금액",
 ] as const;
 
-const RULE_COL_WIDTHS = [8, 10, 24, 13, 13, 13, 13, 18, 14, 12, 12, 12, 14];
+const RULE_COL_WIDTHS = [8, 10, 24, 13, 13, 13, 14, 18, 12, 12, 12, 14];
 
 const TEACHER_SUMMARY_HEADERS = [
   "항목수",
@@ -436,13 +435,12 @@ const RULE_COL = {
   prevUnpaid: 4,
   thisMonthUnpaid: 5,
   prevRecovered: 6,
-  thisMonthPaid: 7,
+  baseVal: 7,
   baseKind: 8,
-  baseVal: 9,
-  op: 10,
-  aux: 11,
-  tax: 12,
-  amount: 13,
+  op: 9,
+  aux: 10,
+  tax: 11,
+  amount: 12,
 } as const;
 
 /** 엑셀 컬럼 번호(1-based) → 알파벳 문자열. A=1, B=2, ... Z=26, AA=27... */
@@ -503,8 +501,6 @@ function renderRuleRow(
     { col: RULE_COL.prevUnpaid, value: classMetrics.prevUnpaid, numFmt: "#,##0" },
     { col: RULE_COL.thisMonthUnpaid, value: classMetrics.thisMonthUnpaid, numFmt: "#,##0" },
     { col: RULE_COL.prevRecovered, value: classMetrics.prevRecoveredPay, numFmt: "#,##0" },
-    { col: RULE_COL.thisMonthPaid, value: classMetrics.thisMonthPaid, numFmt: "#,##0" },
-    { col: RULE_COL.baseKind, value: BASE_LABEL[rule.base] },
     {
       col: RULE_COL.baseVal,
       value: baseVal,
@@ -517,6 +513,7 @@ function renderRuleRow(
             ? "0"
             : "#,##0",
     },
+    { col: RULE_COL.baseKind, value: BASE_LABEL[rule.base] },
     { col: RULE_COL.op, value: OP_LABEL[rule.op] },
     {
       col: RULE_COL.aux,
@@ -556,7 +553,6 @@ interface RuleClassMetrics {
   prevUnpaid: number;
   thisMonthUnpaid: number;
   prevRecoveredPay: number;
-  thisMonthPaid: number;
 }
 
 /**
@@ -602,16 +598,13 @@ function computeRuleClassMetrics(
       prevUnpaid: 0,
       thisMonthUnpaid: 0,
       prevRecoveredPay: 0,
-      thisMonthPaid: 0,
     };
   }
   const agg = calculator.getClassAggregate(teacherId, rule.classIds);
-  const thisMonthPaid = agg.classes.reduce((s, c) => s + c.pay, 0);
   return {
     prevUnpaid: agg.hoesu.hoesuTotal + agg.hoesu.minapTotal,
     thisMonthUnpaid: agg.unpaid,
     prevRecoveredPay: agg.hoesu.payTotal,
-    thisMonthPaid,
   };
 }
 
