@@ -171,10 +171,10 @@ function CourseSelector({
     query === ""
       ? classes
       : classes.filter(
-          (c) =>
-            c.name.toLowerCase().includes(query) ||
-            (c.section?.toLowerCase().includes(query) ?? false),
-        );
+        (c) =>
+          c.name.toLowerCase().includes(query) ||
+          (c.section?.toLowerCase().includes(query) ?? false),
+      );
 
   function toggle(id: string) {
     const next = new Set(state.classIds);
@@ -217,9 +217,8 @@ function CourseSelector({
                 tabIndex={0}
                 onClick={() => toggle(c.id)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggle(c.id); }}
-                className={`flex w-full cursor-pointer items-center gap-2.5 border-b border-[var(--aca-gray-100)] px-3 py-2 text-left ${
-                  checked ? "bg-[var(--aca-blue-10)]" : "bg-[var(--aca-white)]"
-                }`}
+                className={`flex w-full cursor-pointer items-center gap-2.5 border-b border-[var(--aca-gray-100)] px-3 py-2 text-left ${checked ? "bg-[var(--aca-blue-10)]" : "bg-[var(--aca-white)]"
+                  }`}
               >
                 <MiniCheckbox
                   checked={checked}
@@ -331,7 +330,7 @@ function BaseValuePicker({
   return (
     <div className="flex flex-col gap-2">
       <div className="text-[12px] font-semibold text-[var(--aca-gray-600)]">
-        베이스값
+        정산 기준
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {REVENUE_BASE_OPTIONS.map((opt) => {
@@ -616,11 +615,10 @@ function FormulaPreview({
           </div>
         </div>
         <div
-          className={`jb2-tnum shrink-0 text-[18px] font-bold ${
-            cat === "minus"
-              ? "text-[var(--aca-red-primary)]"
-              : "text-[var(--aca-black)]"
-          }`}
+          className={`jb2-tnum shrink-0 text-[18px] font-bold ${cat === "minus"
+            ? "text-[var(--aca-red-primary)]"
+            : "text-[var(--aca-black)]"
+            }`}
         >
           {formatKRW(result)}
         </div>

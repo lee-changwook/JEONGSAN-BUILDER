@@ -105,14 +105,14 @@ const RULE_HEADERS = [
   "이번달 미납액",
   "전월 회수액",
   "이번달 납부액",
-  "베이스값 종류",
+  "정산 기준",
   "OPERATION",
   "보조값",
   "세액",
   "금액",
 ] as const;
 
-const RULE_COL_WIDTHS = [8, 10, 24, 13, 13, 13, 14, 18, 12, 12, 12, 14];
+const RULE_COL_WIDTHS = [8, 10, 24, 13, 13, 13, 14, 28, 12, 12, 12, 14];
 
 const TEACHER_SUMMARY_HEADERS = [
   "항목수",
@@ -488,7 +488,7 @@ function renderRuleRow(
         col: RULE_COL.amount,
         value: null,
         numFmt: "#,##0",
-        // 비율일 때: 보조값 × 베이스값 − 세금(세금은 음수 처리 위해 빈 셀일 땐 0 취급)
+        // 비율일 때: 보조값 × 정산 기준− 세금(세금은 음수 처리 위해 빈 셀일 땐 0 취급)
         formula: `${auxCellAddr}*${baseCellAddr}-IFERROR(${taxCellAddr},0)`,
         resultFallback: amount,
       }

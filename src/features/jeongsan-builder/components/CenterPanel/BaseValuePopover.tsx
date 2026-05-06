@@ -9,7 +9,7 @@ import {
 } from "@/features/jeongsan-builder/calculator";
 
 /**
- * 테이블 행의 베이스값 선택을 위한 커스텀 팝오버 드롭다운.
+ * 테이블 행의 정산 기준선택을 위한 커스텀 팝오버 드롭다운.
  * native `<select>` 대비 장점:
  *   - 그룹 헤더로 카테고리(매출 / 수량 / 미납 / 기타) 구분
  *   - 옵션마다 label + hint + 현재 선택 수업에서 계산된 preview value 동시 노출
@@ -132,7 +132,7 @@ export function BaseValuePopover({
             {...props}
             type="button"
             className="flex h-6 w-full cursor-pointer items-center justify-between gap-0.5 rounded-[3px] border border-[var(--aca-gray-200)] bg-[var(--aca-white)] px-1.5 text-[10.5px] text-[var(--aca-black)]"
-            aria-label="베이스값 선택"
+            aria-label="정산 기준선택"
             title={current?.hint ?? current?.label ?? value}
           >
             <span className="truncate">{current?.label ?? value}</span>
@@ -169,11 +169,10 @@ export function BaseValuePopover({
                       key={it.id}
                       type="button"
                       onClick={() => pick(it.id)}
-                      className={`flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-left ${
-                        selected
+                      className={`flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-left ${selected
                           ? "bg-[var(--aca-blue-10)]"
                           : "hover:bg-[var(--aca-gray-10)]"
-                      }`}
+                        }`}
                       title={it.hint}
                     >
                       <span className="inline-flex size-3 shrink-0 items-center justify-center">

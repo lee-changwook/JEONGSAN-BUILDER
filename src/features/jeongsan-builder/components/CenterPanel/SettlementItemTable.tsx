@@ -357,9 +357,8 @@ function ItemRow({
         e.preventDefault();
         onRowDrop();
       }}
-      className={`${
-        selected ? "bg-[#FBFAF4]" : "bg-[var(--aca-white)]"
-      } ${isDragging ? "opacity-40" : ""}`}
+      className={`${selected ? "bg-[#FBFAF4]" : "bg-[var(--aca-white)]"
+        } ${isDragging ? "opacity-40" : ""}`}
       style={
         isDragOver
           ? { boxShadow: "inset 0 2px 0 var(--aca-blue-primary)" }
@@ -433,9 +432,9 @@ function ItemRow({
         style={
           baseCellSelected
             ? {
-                outline: "2px solid var(--aca-blue-primary)",
-                outlineOffset: "-2px",
-              }
+              outline: "2px solid var(--aca-blue-primary)",
+              outlineOffset: "-2px",
+            }
             : undefined
         }
       >
@@ -448,9 +447,9 @@ function ItemRow({
         style={
           opCellSelected
             ? {
-                outline: "2px solid var(--aca-blue-primary)",
-                outlineOffset: "-2px",
-              }
+              outline: "2px solid var(--aca-blue-primary)",
+              outlineOffset: "-2px",
+            }
             : undefined
         }
       >
@@ -492,11 +491,10 @@ function ItemRow({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div
-          className={`jb2-tnum whitespace-nowrap text-[13.5px] font-bold ${
-            rule.cat === "minus"
-              ? "text-[var(--aca-red-primary)]"
-              : "text-[var(--aca-black)]"
-          }`}
+          className={`jb2-tnum whitespace-nowrap text-[13.5px] font-bold ${rule.cat === "minus"
+            ? "text-[var(--aca-red-primary)]"
+            : "text-[var(--aca-black)]"
+            }`}
         >
           {formatKRW(result)}
         </div>
@@ -525,7 +523,7 @@ const COLUMNS = [
   "#",
   "유형",
   "항목명 · 상세",
-  "베이스값",
+  "정산 기준",
   "OPERATION",
   "보조값",
   "세금",
@@ -687,7 +685,7 @@ export function SettlementItemTable() {
   }
 
   /**
-   * 베이스값 변경. 이 rule의 base 셀이 다중 선택의 일부이면 bulk 적용.
+   * 정산 기준변경. 이 rule의 base 셀이 다중 선택의 일부이면 bulk 적용.
    * (revenue rule에 한정 — calculator.bulkSetBase가 내부 필터링)
    */
   function handleBaseChange(ruleId: string, next: BaseId) {
@@ -866,13 +864,13 @@ export function SettlementItemTable() {
                 )}
                 valueGroupDraft={
                   groupEdit?.col === "value" &&
-                  groupBroadcastIds.has(rule.id)
+                    groupBroadcastIds.has(rule.id)
                     ? groupEdit.draft
                     : undefined
                 }
                 customBaseGroupDraft={
                   groupEdit?.col === "customBase" &&
-                  groupBroadcastIds.has(rule.id)
+                    groupBroadcastIds.has(rule.id)
                     ? groupEdit.draft
                     : undefined
                 }
