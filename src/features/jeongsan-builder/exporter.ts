@@ -97,22 +97,52 @@ const OP_LABEL: Record<OpId, string> = {
   custom: "커스텀",
 };
 
-const RULE_HEADERS = [
-  "#",
-  "유형",
-  "항목명",
-  "전월 미납액",
-  "이번달 미납액",
-  "전월 회수액",
-  "이번달 납부액",
-  "정산 기준",
-  "OPERATION",
-  "보조값",
-  "세액",
-  "금액",
-] as const;
+/**
+ * 기존 4개 정보 컬럼(전월 미납액 / 이번달 미납액 / 전월 회수액 / 이번달 납부액)만으로
+ * base 값을 표현 가능한 케이스. 컬럼을 추가하지 않고 해당 셀(또는 조합)을 그대로 참조한다.
+ *
+ * - 이번달 납부액(G) = sum of c.pay = agg.revenueNet
+ * - 전월 회수액(F)   = agg.hoesu.payTotal
+ * - 이번달 미납액(E) = agg.unpaid
+ */
+type BaseExprBuilder = (layout: RuleColumnLayout, row: number) => string;
+const BASE_REUSE_EXPR: Partial<Record<BaseId, BaseExprBuilder>> = {
+  unpaidShare: (l, r) => `${colLetter(l.thisMonthUnpaid)}${r}`,
+  revenueNet: (l, r) => `${colLetter(l.thisMonthPaid)}${r}`,
+  revenueWithUnpaidNet: (l, r) =>
+    `(${colLetter(l.thisMonthPaid)}${r}+${colLetter(l.prevRecovered)}${r})`,
+  // 총 미납(음수) = -(전월 미납 D + 이번달 미납 E)
+  currentUnpaidNeg: (l, r) =>
+    `-(${colLetter(l.prevUnpaid)}${r}+${colLetter(l.thisMonthUnpaid)}${r})`,
+};
 
-const RULE_COL_WIDTHS = [8, 10, 24, 13, 13, 13, 14, 28, 12, 12, 12, 14];
+/**
+ * 기존 컬럼으로 표현이 불가능해 별도 컬럼이 필요한 base. 사용된 것만 동적으로 추가된다.
+ */
+const BASE_COLUMN_LABEL: Partial<Record<BaseId, string>> = {
+  revenueVAT: "매출(미적용)",
+  revenueWithUnpaidVAT: "매출+미납(미적용)",
+  hours: "시수",
+  students: "학생 수",
+  direct: "직접 입력",
+};
+
+const BASE_COLUMN_WIDTH: Partial<Record<BaseId, number>> = {
+  revenueVAT: 14,
+  revenueWithUnpaidVAT: 18,
+  hours: 10,
+  students: 10,
+  direct: 12,
+};
+
+/** 신규 base 컬럼이 정렬되는 표시 순서. (기존 컬럼 재사용 base는 포함 X) */
+const BASE_DISPLAY_ORDER: BaseId[] = [
+  "revenueVAT",
+  "revenueWithUnpaidVAT",
+  "hours",
+  "students",
+  "direct",
+];
 
 const TEACHER_SUMMARY_HEADERS = [
   "항목수",
@@ -199,14 +229,18 @@ async function buildAllModeArtifact(
   const sheet = workbook.addWorksheet("강사별 정산", {
     views: [{ showGridLines: true }],
   });
-  applyRuleColumnWidths(sheet);
+  // 동일 시트에 모든 강사가 세로로 누적되므로 모든 강사 rule의 합집합으로 컬럼을 결정한다.
+  const allRules: RuleItem[] = [];
+  for (const t of teachers) allRules.push(...calculator.getRules(t.id));
+  const layout = buildRuleLayout(allRules);
+  applyRuleColumnWidths(sheet, layout.widths);
 
   let row = 1;
   if (teachers.length === 0) {
     sheet.getCell(row, 1).value = "정산할 강사가 없습니다.";
   } else {
     for (const teacher of teachers) {
-      row = renderTeacherBlock(sheet, calculator, teacher.id, row);
+      row = renderTeacherBlock(sheet, calculator, teacher.id, row, layout);
       row += 2;
     }
   }
@@ -292,8 +326,10 @@ function renderTeacherSheet(
   const sheet = workbook.addWorksheet(sheetName, {
     views: [{ showGridLines: true }],
   });
-  applyRuleColumnWidths(sheet);
-  renderTeacherBlock(sheet, calculator, teacher.id, 1);
+  // 강사 1명의 rule만 사용하므로 그 강사의 base만 컬럼에 포함된다.
+  const layout = buildRuleLayout(calculator.getRules(teacher.id));
+  applyRuleColumnWidths(sheet, layout.widths);
+  renderTeacherBlock(sheet, calculator, teacher.id, 1, layout);
   return sheet;
 }
 
@@ -306,6 +342,7 @@ function renderTeacherBlock(
   calculator: SettlementCalculator,
   teacherId: string,
   startRow: number,
+  layout: RuleColumnLayout,
 ): number {
   const teacher = calculator.getTeacher(teacherId);
   if (!teacher) return startRow;
@@ -315,7 +352,19 @@ function renderTeacherBlock(
 
   let row = startRow;
   const blockStartRow = row;
-  const colEnd = RULE_HEADERS.length;
+  const colEnd = layout.total;
+
+  // 요약 SUM 수식이 참조할 rule 데이터 row 범위를 미리 계산.
+  // 레이아웃: title(0) / 요약 헤더(1) / 요약 값(2) / 빈 행(3) / rule 헤더(4) / rule 데이터(5..)
+  const summaryValueRow = startRow + 2;
+  const ruleDataStartRow = startRow + 5;
+  const ruleDataEndRow =
+    rules.length > 0 ? ruleDataStartRow + rules.length - 1 : ruleDataStartRow;
+
+  const settleColLetter = colLetter(layout.settle);
+  const taxColLetter = colLetter(layout.tax);
+  const settleRange = `${settleColLetter}${ruleDataStartRow}:${settleColLetter}${ruleDataEndRow}`;
+  const taxRange = `${taxColLetter}${ruleDataStartRow}:${taxColLetter}${ruleDataEndRow}`;
 
   // 타이틀: 강사명 (과목 행은 제거됨 — 강사명만 표시)
   sheet.mergeCells(row, 1, row, colEnd);
@@ -348,25 +397,66 @@ function renderTeacherBlock(
   }
   row += 1;
 
-  // 요약 값: 정산액(index 3), 실지급액(index 6) 강조
-  const summaryValues: Array<string | number> = summary
-    ? [
-      summary.itemCount,
-      summary.gross,
-      summary.deduct,
-      summary.settle,
-      summary.withholding,
-      Math.max(summary.taxable, 0),
-      summary.net,
-    ]
-    : ["-", "-", "-", "-", "-", "-", "-"];
+  // 요약 값
+  // 정산액(index 3) / 세액(4) / 과세기준액(5) / 실지급액(6)은 rule 행을 SUM/SUMIF로 참조하는 수식.
+  // 항목수(0) / 지급액 합계(1) / 차감액 합계(2)는 calculator가 계산한 정적값.
+  type SummarySpec =
+    | { kind: "value"; value: string | number; numFmt?: string }
+    | {
+      kind: "formula";
+      formula: string;
+      resultFallback: number;
+      numFmt?: string;
+    };
 
-  summaryValues.forEach((value, index) => {
+  // 정산액 셀(컬럼 D = 4번째)과 세액 셀(컬럼 E = 5번째)을 실지급액 수식에서 참조.
+  const summarySettleAddr = `${colLetter(4)}${summaryValueRow}`;
+  const summaryTaxAddr = `${colLetter(5)}${summaryValueRow}`;
+
+  const summarySpecs: SummarySpec[] = summary
+    ? [
+      { kind: "value", value: summary.itemCount },
+      { kind: "value", value: summary.gross, numFmt: "#,##0" },
+      { kind: "value", value: summary.deduct, numFmt: "#,##0" },
+      {
+        kind: "formula",
+        formula: `SUM(${settleRange})`,
+        resultFallback: summary.settle,
+        numFmt: "#,##0",
+      },
+      {
+        kind: "formula",
+        formula: `SUM(${taxRange})`,
+        // 기존 summary.withholding는 음수로 저장됨 → 양수 표시로 통일.
+        resultFallback: -summary.withholding,
+        numFmt: "#,##0",
+      },
+      {
+        kind: "formula",
+        formula: `MAX(0,SUMIF(${taxRange},">0",${settleRange}))`,
+        resultFallback: Math.max(summary.taxable, 0),
+        numFmt: "#,##0",
+      },
+      {
+        kind: "formula",
+        formula: `${summarySettleAddr}-${summaryTaxAddr}`,
+        resultFallback: summary.net,
+        numFmt: "#,##0",
+      },
+    ]
+    : Array.from({ length: TEACHER_SUMMARY_HEADERS.length }, () => ({
+      kind: "value" as const,
+      value: "-",
+    }));
+
+  summarySpecs.forEach((spec, index) => {
     const cell = sheet.getCell(row, index + 1);
-    cell.value = value;
-    if (typeof value === "number" && index > 0) {
-      cell.numFmt = "#,##0";
+    if (spec.kind === "formula") {
+      cell.value = { formula: spec.formula, result: spec.resultFallback };
+    } else {
+      cell.value = spec.value;
     }
+    if (spec.numFmt) cell.numFmt = spec.numFmt;
     // 정산액(3) / 실지급액(6) → 연한 핑크 배경 + 딥 핑크 볼드
     if (index === 3 || index === 6) {
       setFinalValueStyle(cell);
@@ -375,14 +465,14 @@ function renderTeacherBlock(
     }
   });
   // 요약 값 행의 나머지 오른쪽 컬럼도 테두리 유지
-  for (let c = summaryValues.length + 1; c <= colEnd; c += 1) {
+  for (let c = summarySpecs.length + 1; c <= colEnd; c += 1) {
     const cell = sheet.getCell(row, c);
     setValueStyle(cell);
   }
   row += 2; // 빈 행 1개
 
   // Rule 테이블 헤더
-  RULE_HEADERS.forEach((header, index) => {
+  layout.headers.forEach((header, index) => {
     const cell = sheet.getCell(row, index + 1);
     cell.value = header;
     setHeaderStyle(cell);
@@ -391,7 +481,7 @@ function renderTeacherBlock(
 
   // Rule 행
   if (rules.length === 0) {
-    sheet.mergeCells(row, 1, row, RULE_HEADERS.length);
+    sheet.mergeCells(row, 1, row, layout.total);
     const emptyCell = sheet.getCell(row, 1);
     emptyCell.value = "정산 항목이 없습니다.";
     emptyCell.alignment = { vertical: "middle", horizontal: "center" };
@@ -412,6 +502,7 @@ function renderTeacherBlock(
         index + 1,
         metrics,
         nameColor,
+        layout,
       );
       row += 1;
     });
@@ -425,23 +516,111 @@ function renderTeacherBlock(
 }
 
 /**
- * Rule 테이블 컬럼 인덱스(1-based, 엑셀 컬럼 = index).
- * 수식 셀 참조에 사용되므로 RULE_HEADERS와 반드시 동기화.
+ * Rule 테이블의 동적 컬럼 레이아웃.
+ * 사용된 base 종류에 따라 base value 컬럼들이 baseKind와 op 사이에 삽입된다.
+ * 모든 컬럼 인덱스는 1-based (엑셀 컬럼 번호와 동일).
  */
-const RULE_COL = {
-  ordinal: 1,
-  category: 2,
-  name: 3,
-  prevUnpaid: 4,
-  thisMonthUnpaid: 5,
-  prevRecovered: 6,
-  baseVal: 7,
-  baseKind: 8,
-  op: 9,
-  aux: 10,
-  tax: 11,
-  amount: 12,
-} as const;
+interface RuleColumnLayout {
+  headers: string[];
+  widths: number[];
+  /** baseId → 1-based 컬럼 인덱스. 해당 base를 쓰는 rule이 있을 때만 키가 존재. */
+  baseColumns: Map<BaseId, number>;
+  // 고정 컬럼
+  ordinal: number;
+  category: number;
+  name: number;
+  prevUnpaid: number;
+  thisMonthUnpaid: number;
+  prevRecovered: number;
+  /** 학생이 실제로 납부한 금액(payTotal 합) — 정산 계산용 base와 별개의 정보 컬럼. */
+  thisMonthPaid: number;
+  baseKind: number;
+  // base value 컬럼들 이후의 동적 위치
+  op: number;
+  aux: number;
+  settle: number;
+  tax: number;
+  amount: number;
+  total: number;
+}
+
+/** rule이 정산 계산에 실제로 사용하는 base. plus/minus는 항상 customBase 기반이므로 "direct" 취급. */
+function effectiveBase(rule: RuleItem): BaseId {
+  return rule.cat === "revenue" ? rule.base : "direct";
+}
+
+/** 신규 컬럼이 필요한(= 기존 컬럼으로 표현 불가능한) base들만 모아서 정렬된 배열로. */
+function collectUsedBases(rules: RuleItem[]): BaseId[] {
+  const used = new Set<BaseId>();
+  for (const r of rules) {
+    const base = effectiveBase(r);
+    if (!BASE_REUSE_EXPR[base]) used.add(base);
+  }
+  return BASE_DISPLAY_ORDER.filter((b) => used.has(b));
+}
+
+function buildRuleLayout(rules: RuleItem[]): RuleColumnLayout {
+  const usedBases = collectUsedBases(rules);
+  const headers: string[] = [
+    "#",
+    "유형",
+    "항목명",
+    "전월 미납액",
+    "이번달 미납액",
+    "전월 회수액",
+    "이번달 납부액",
+    "정산 기준",
+  ];
+  const widths: number[] = [8, 10, 24, 13, 13, 13, 14, 28];
+
+  const baseColumns = new Map<BaseId, number>();
+  for (const base of usedBases) {
+    const label = BASE_COLUMN_LABEL[base];
+    const width = BASE_COLUMN_WIDTH[base];
+    if (!label || !width) {
+      throw new Error(`buildRuleLayout: ${base} 라벨/폭 정의 누락`);
+    }
+    baseColumns.set(base, headers.length + 1);
+    headers.push(label);
+    widths.push(width);
+  }
+
+  const op = headers.length + 1;
+  headers.push("OPERATION");
+  widths.push(12);
+  const aux = headers.length + 1;
+  headers.push("보조값");
+  widths.push(12);
+  const settle = headers.length + 1;
+  headers.push("정산액");
+  widths.push(13);
+  const tax = headers.length + 1;
+  headers.push("세액");
+  widths.push(12);
+  const amount = headers.length + 1;
+  headers.push("최종 금액");
+  widths.push(14);
+
+  return {
+    headers,
+    widths,
+    baseColumns,
+    ordinal: 1,
+    category: 2,
+    name: 3,
+    prevUnpaid: 4,
+    thisMonthUnpaid: 5,
+    prevRecovered: 6,
+    thisMonthPaid: 7,
+    baseKind: 8,
+    op,
+    aux,
+    settle,
+    tax,
+    amount,
+    total: headers.length,
+  };
+}
 
 /** 엑셀 컬럼 번호(1-based) → 알파벳 문자열. A=1, B=2, ... Z=26, AA=27... */
 function colLetter(col: number): string {
@@ -463,6 +642,7 @@ function renderRuleRow(
   ordinal: number,
   classMetrics: RuleClassMetrics,
   nameColor: string | null,
+  layout: RuleColumnLayout,
 ): void {
   const baseVal = result?.baseVal ?? 0;
   const amount = result?.result ?? 0;
@@ -470,8 +650,26 @@ function renderRuleRow(
   const taxAmount = rule.taxable ? Math.round(amount * WITHHOLDING_RATE) : null;
   const auxValue = ruleShowsAux(rule.op) ? rule.value : null;
 
-  const auxCellAddr = `${colLetter(RULE_COL.aux)}${row}`;
-  const taxCellAddr = `${colLetter(RULE_COL.tax)}${row}`;
+  // 이 rule이 사용하는 base. 기존 4개 정보 컬럼으로 표현 가능하면 그 셀(또는 조합)을
+  // 참조 식으로 만들고, 그렇지 않으면 base 전용 신규 컬럼의 셀을 사용한다.
+  const ruleBase = effectiveBase(rule);
+  const reuseBuilder = BASE_REUSE_EXPR[ruleBase];
+  const ownBaseCol = layout.baseColumns.get(ruleBase);
+
+  let baseValueExpr: string;
+  if (reuseBuilder) {
+    baseValueExpr = reuseBuilder(layout, row);
+  } else if (ownBaseCol) {
+    baseValueExpr = `${colLetter(ownBaseCol)}${row}`;
+  } else {
+    throw new Error(
+      `renderRuleRow: base "${ruleBase}" 의 셀 표현이 정의돼 있지 않습니다.`,
+    );
+  }
+
+  const auxCellAddr = `${colLetter(layout.aux)}${row}`;
+  const settleCellAddr = `${colLetter(layout.settle)}${row}`;
+  const taxCellAddr = `${colLetter(layout.tax)}${row}`;
 
   type CellSpec = {
     col: number;
@@ -481,61 +679,104 @@ function renderRuleRow(
     resultFallback?: number;
   };
 
-  // 금액 수식: 세액 컬럼(K)에 값이 있으면 반드시 금액에서 차감한다.
-  // G열(이번달 납부액)은 실제 납부액 고정값이므로 수식에서 참조하지 않고
-  // baseVal을 숫자 리터럴로 embed한다.
-  const amountFormula = ((): string => {
-    const tax = `IFERROR(${taxCellAddr},0)`;
+  // 정산액 (세액 차감 전) 수식. base 부분은 baseValueExpr (기존 컬럼 참조 또는 조합,
+  // 또는 신규 base 컬럼 셀) 로 채워서 사용자가 셀 값만 봐도 의미를 파악할 수 있게 한다.
+  // 마이너스 카테고리는 자연 결과값을 음수로 뒤집는 calculator.computeRule와 일치시키기 위해 -()로 감싼다.
+  const settleFormula = ((): string => {
+    let core: string;
     switch (rule.op) {
       case "rate":
       case "multiply":
-        // 금액 = 보조값 × 베이스 - 세금
-        return `${auxCellAddr}*${baseVal}-${tax}`;
+        core = `${auxCellAddr}*${baseValueExpr}`;
+        break;
       case "add":
-        // 금액 = 베이스 + 보조값 - 세금
-        return `${baseVal}+${auxCellAddr}-${tax}`;
+        core = `${baseValueExpr}+${auxCellAddr}`;
+        break;
       case "fixed":
-        // 금액 = 베이스 - 세금 (보조값 없음)
-        return `${baseVal}-${tax}`;
+        core = `${baseValueExpr}`;
+        break;
       case "custom":
-        // custom은 복잡한 케이스라 정적값 유지 — formula 반환 없음
         return "";
     }
+    return rule.cat === "minus" ? `-(${core})` : core;
   })();
 
-  const amountSpec: CellSpec =
-    amountFormula
-      ? {
-        col: RULE_COL.amount,
-        value: null,
-        numFmt: "#,##0",
-        formula: amountFormula,
-        resultFallback: amount,
-      }
-      : { col: RULE_COL.amount, value: amount, numFmt: "#,##0" };
+  // 세액 수식: 과세 대상이면 ROUND(정산액 × 0.033, 0). 비과세면 빈 셀.
+  const taxFormula =
+    rule.taxable && settleFormula
+      ? `ROUND(${settleCellAddr}*${WITHHOLDING_RATE},0)`
+      : "";
+
+  // 최종 금액 = 정산액 - 세액 (비과세 셀은 0으로 처리됨).
+  const amountFormula = settleFormula
+    ? `${settleCellAddr}-IFERROR(${taxCellAddr},0)`
+    : "";
+
+  const settleSpec: CellSpec = settleFormula
+    ? {
+      col: layout.settle,
+      value: null,
+      numFmt: "#,##0",
+      formula: settleFormula,
+      resultFallback: amount,
+    }
+    : { col: layout.settle, value: amount, numFmt: "#,##0" };
+
+  const taxSpec: CellSpec = taxFormula
+    ? {
+      col: layout.tax,
+      value: null,
+      numFmt: "#,##0",
+      formula: taxFormula,
+      resultFallback: taxAmount ?? 0,
+    }
+    : { col: layout.tax, value: taxAmount, numFmt: "#,##0" };
+
+  const finalAmount = amount - (taxAmount ?? 0);
+  const amountSpec: CellSpec = amountFormula
+    ? {
+      col: layout.amount,
+      value: null,
+      numFmt: "#,##0",
+      formula: amountFormula,
+      resultFallback: finalAmount,
+    }
+    : { col: layout.amount, value: finalAmount, numFmt: "#,##0" };
 
   const specs: CellSpec[] = [
-    { col: RULE_COL.ordinal, value: ordinal },
-    { col: RULE_COL.category, value: CATEGORY_LABEL[rule.cat] },
-    { col: RULE_COL.name, value: rule.name },
-    { col: RULE_COL.prevUnpaid, value: classMetrics.prevUnpaid, numFmt: "#,##0" },
-    { col: RULE_COL.thisMonthUnpaid, value: classMetrics.thisMonthUnpaid, numFmt: "#,##0" },
-    { col: RULE_COL.prevRecovered, value: classMetrics.prevRecoveredPay, numFmt: "#,##0" },
+    { col: layout.ordinal, value: ordinal },
+    { col: layout.category, value: CATEGORY_LABEL[rule.cat] },
+    { col: layout.name, value: rule.name },
+    { col: layout.prevUnpaid, value: classMetrics.prevUnpaid, numFmt: "#,##0" },
+    { col: layout.thisMonthUnpaid, value: classMetrics.thisMonthUnpaid, numFmt: "#,##0" },
+    { col: layout.prevRecovered, value: classMetrics.prevRecoveredPay, numFmt: "#,##0" },
     {
-      col: RULE_COL.baseVal,
-      // 정산기준에 관계없이 실제 납부액(payTotal 합)을 표시한다.
-      // 미납이면 0, 부분 납부면 그 금액. baseVal(정산 계산용)과는 무관.
+      col: layout.thisMonthPaid,
+      // 정산기준에 관계없이 실제 납부액(payTotal 합). 정보 컬럼이며 수식 참조 대상은 아님.
       value: classMetrics.thisMonthPaid,
       numFmt: "#,##0",
     },
-    { col: RULE_COL.baseKind, value: BASE_LABEL[rule.base] },
-    { col: RULE_COL.op, value: OP_LABEL[rule.op] },
+    { col: layout.baseKind, value: BASE_LABEL[rule.base] },
+    // 신규 base 컬럼이 할당된 경우에만 그 셀에 baseVal을 적는다.
+    // 기존 컬럼을 재사용하는 base(unpaidShare/revenueNet/revenueWithUnpaidNet)는
+    // 이미 정보 컬럼에 값이 있으므로 별도 셀을 만들지 않는다.
+    ...(ownBaseCol
+      ? [
+        {
+          col: ownBaseCol,
+          value: baseVal,
+          numFmt: "#,##0",
+        } satisfies CellSpec,
+      ]
+      : []),
+    { col: layout.op, value: OP_LABEL[rule.op] },
     {
-      col: RULE_COL.aux,
+      col: layout.aux,
       value: auxValue,
       numFmt: rule.op === "rate" ? "0.###" : "#,##0",
     },
-    { col: RULE_COL.tax, value: taxAmount, numFmt: "#,##0" },
+    settleSpec,
+    taxSpec,
     amountSpec,
   ];
 
@@ -557,9 +798,16 @@ function renderRuleRow(
     setValueStyle(cell);
   }
 
+  // 이 rule이 쓰지 않는 다른 신규 base 컬럼들은 빈 셀이지만 테두리는 유지.
+  // (기존 컬럼 재사용 base는 ownBaseCol이 없으므로 모든 신규 컬럼에 테두리만 적용된다)
+  for (const [base, col] of layout.baseColumns) {
+    if (base === ruleBase) continue;
+    setValueStyle(sheet.getCell(row, col));
+  }
+
   // 항목명 컬러 오버라이드 (같은 수업명은 동일 컬러 적용)
   if (nameColor) {
-    const nameCell = sheet.getCell(row, RULE_COL.name);
+    const nameCell = sheet.getCell(row, layout.name);
     nameCell.font = { color: { argb: nameColor }, bold: true };
   }
 }
@@ -795,8 +1043,11 @@ function resolveSelectedTeachers(
   return calculator.getTeachers().filter((t) => idSet.has(t.id));
 }
 
-function applyRuleColumnWidths(sheet: ExcelJS.Worksheet): void {
-  RULE_COL_WIDTHS.forEach((width, index) => {
+function applyRuleColumnWidths(
+  sheet: ExcelJS.Worksheet,
+  widths: number[],
+): void {
+  widths.forEach((width, index) => {
     sheet.getColumn(index + 1).width = width;
   });
 }
