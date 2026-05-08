@@ -39,12 +39,12 @@ const GROUPS: Array<{ title: string; items: OptionMeta[] }> = [
       },
       {
         id: "revenueVAT",
-        label: "매출 (수수료 포함)",
+        label: "매출 (수수료 미적용)",
         hint: "학생이 낸 총액 (납부액)",
       },
       {
         id: "revenueNet",
-        label: "순매출 (수수료 제외)",
+        label: "순매출 (수수료 적용)",
         hint: "카드 수수료 차감 후 실입금 (PAY)",
       },
     ],

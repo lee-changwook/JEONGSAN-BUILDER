@@ -11,10 +11,10 @@
  * `computeClassAggregate`, `baseValueFromAgg`를 이식하되 이 파일에서 독립 관리한다.
  *
  * 매출 축 처리:
- *   - xlsx의 납부액(`nabipTotal`) = "매출 (수수료 포함)" (학생이 학원에 낸 총액)
- *   - xlsx의 PAY(`payTotal`)       = "순매출 (수수료 제외)" (카드사가 수수료 떼고 학원에 실입금한 금액)
+ *   - xlsx의 납부액(`nabipTotal`) = "매출 (수수료 미적용)" (학생이 학원에 낸 총액)
+ *   - xlsx의 PAY(`payTotal`)       = "순매출 (수수료 적용)" (카드사가 수수료 떼고 학원에 실입금한 금액)
  *   - 두 값은 xlsx가 이미 제공하므로 파생 계산(×/÷) 없이 1:1 매핑한다.
- *   - 내부 필드명 `revenueVAT`/`revenueNet`는 레거시 식별자이며, UI 라벨은 "수수료 포함/제외"로 표시.
+ *   - 내부 필드명 `revenueVAT`/`revenueNet`는 레거시 식별자이며, UI 라벨은 "수수료 미적용/적용"으로 표시.
  */
 
 import type {
@@ -217,8 +217,8 @@ function blockToClassItem(
     students,
     // 엑셀 헤더의 `시수: {숫자}`에서 파싱된 값. 헤더에 없으면 0으로 기본.
     hours: block.hours ?? 0,
-    // 매출 (수수료 포함) = 납부액 원본
-    // 순매출 (수수료 제외) = PAY (카드 수수료 차감 후 학원 실입금)
+    // 매출 (수수료 미적용) = 납부액 원본
+    // 순매출 (수수료 적용) = PAY (카드 수수료 차감 후 학원 실입금)
     revenueVAT: block.totals.nabipTotal,
     revenueNet: block.totals.payTotal,
     unpaid: block.totals.minapTotal,

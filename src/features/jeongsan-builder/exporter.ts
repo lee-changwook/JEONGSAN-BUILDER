@@ -78,8 +78,8 @@ const CATEGORY_LABEL: Record<CategoryId, string> = {
 };
 
 const BASE_LABEL: Record<BaseId, string> = {
-  revenueVAT: "매출 (수수료 포함)",
-  revenueNet: "순매출 (수수료 제외)",
+  revenueVAT: "매출 (수수료 미적용)",
+  revenueNet: "순매출 (수수료 적용)",
   revenueWithUnpaidVAT: "매출 + 미납회수 (수수료 미적용)",
   revenueWithUnpaidNet: "매출 + 미납회수 (수수료 적용)",
   hours: "시수",
