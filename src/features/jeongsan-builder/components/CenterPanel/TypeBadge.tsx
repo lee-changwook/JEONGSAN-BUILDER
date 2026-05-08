@@ -1,7 +1,21 @@
 import type { CategoryId } from "@/features/jeongsan-builder/calculator";
 
-export function TypeBadge({ cat }: { cat: CategoryId }) {
+export function TypeBadge({
+  cat,
+  bochungbiOnly,
+}: {
+  cat: CategoryId;
+  /** revenue 룰이 보충비 수업에만 연결돼 있으면 "보충비" 라벨로 렌더. */
+  bochungbiOnly?: boolean;
+}) {
   if (cat === "revenue") {
+    if (bochungbiOnly) {
+      return (
+        <span className="inline-flex h-[22px] min-w-[42px] items-center justify-center rounded bg-[var(--aca-green-light)] px-1.5 text-[11px] font-bold tracking-[0.4px] text-[var(--aca-green)]">
+          보충비
+        </span>
+      );
+    }
     return (
       <span className="inline-flex h-[22px] min-w-[42px] items-center justify-center rounded bg-[var(--aca-revenue-bg)] px-1.5 text-[11px] font-bold tracking-[0.4px] text-[var(--aca-revenue-fg)]">
         수업

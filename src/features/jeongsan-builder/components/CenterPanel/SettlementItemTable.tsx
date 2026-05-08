@@ -162,7 +162,7 @@ function RevenueMetrics({
 
   return (
     <div
-      className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] leading-[1.4]"
+      className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] leading-[1.4]"
       style={{ color: "var(--aca-gray-500)" }}
     >
       {items.map((it) => (
@@ -284,6 +284,18 @@ function ItemRow({
   const canShowDetail = rule.cat === "revenue" && rule.classIds.length > 0;
   const auxNeeded = OPS_NEEDING_AUX.has(rule.op);
 
+  // revenue 룰의 연결 수업이 전부 보충비면 TypeBadge 라벨을 "수업" → "보충비"로 전환.
+  // (혼합/미연결/direct는 기본 "수업" 유지)
+  let bochungbiOnly = false;
+  if (rule.cat === "revenue" && rule.classIds.length > 0) {
+    const classes = calculator.getClasses(teacherId);
+    const linked = rule.classIds
+      .map((cid) => classes.find((c) => c.id === cid))
+      .filter((c): c is NonNullable<typeof c> => Boolean(c));
+    bochungbiOnly =
+      linked.length > 0 && linked.every((c) => c.kind === "bochungbi");
+  }
+
   let baseCell: React.ReactNode;
   if (rule.cat === "revenue") {
     const agg = calculator.getClassAggregate(teacherId, rule.classIds);
@@ -395,9 +407,9 @@ function ItemRow({
         <RoundTag label={String(ordinal)} />
       </td>
       <td className="w-[44px] px-1.5 py-3 align-top">
-        <TypeBadge cat={rule.cat} />
+        <TypeBadge cat={rule.cat} bochungbiOnly={bochungbiOnly} />
       </td>
-      <td className="min-w-[260px] px-2.5 py-3 align-top">
+      <td className="min-w-[160px] px-2.5 py-3 align-top">
         <div
           className="text-[13.5px] font-semibold leading-[1.45]"
           style={{ color: "var(--aca-black)" }}
@@ -412,18 +424,22 @@ function ItemRow({
             />
           )}
         </div>
-        {rule.description && (
-          <div className="mt-[3px] text-[11.5px] leading-[1.5] text-[var(--aca-gray-500)]">
-            {rule.description}
-          </div>
-        )}
-        {rule.cat === "revenue" && (
-          <RevenueMetrics
-            teacherId={teacherId}
-            rule={rule}
-            calculator={calculator}
-          />
-        )}
+      </td>
+      <td className="min-w-[200px] px-2.5 py-3 align-top">
+        <div className="flex flex-col gap-1.5">
+          {rule.description && (
+            <div className="text-[11.5px] leading-[1.5] text-[var(--aca-gray-500)]">
+              {rule.description}
+            </div>
+          )}
+          {rule.cat === "revenue" && (
+            <RevenueMetrics
+              teacherId={teacherId}
+              rule={rule}
+              calculator={calculator}
+            />
+          )}
+        </div>
       </td>
       <td
         className="w-[80px] px-1.5 py-3 align-top"
@@ -481,13 +497,8 @@ function ItemRow({
           <MiniCheckbox checked={rule.taxable} onChange={onTaxChange} color="#2BB673" />
         </div>
       </td>
-      <td className="min-w-[150px] px-2.5 py-3 align-top">
-        <span className="jb2-mono text-[11.5px] text-[var(--aca-gray-600)]">
-          {formula}
-        </span>
-      </td>
       <td
-        className="min-w-[130px] py-3 pr-4 pl-2 text-right align-top"
+        className="min-w-[140px] py-3 pr-2 pl-2 text-right align-top"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div
@@ -498,6 +509,19 @@ function ItemRow({
         >
           {formatKRW(result)}
         </div>
+        {formula && (
+          <div
+            className="jb2-mono mt-0.5 text-[10.5px] leading-[1.4] text-[var(--aca-gray-400)]"
+            title={formula}
+          >
+            {formula}
+          </div>
+        )}
+      </td>
+      <td
+        className="w-[58px] py-3 pr-4 pl-1 text-center align-middle"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {canShowDetail ? (
           <CourseDetailPopover
             teacherId={teacherId}
@@ -508,7 +532,7 @@ function ItemRow({
             <ChevronRight className="size-2.5" />
           </CourseDetailPopover>
         ) : (
-          <span className="mt-1 inline-flex items-center gap-0.5 text-[11px] text-[var(--aca-gray-300)]">
+          <span className="inline-flex items-center gap-0.5 text-[11px] text-[var(--aca-gray-300)]">
             상세
             <ChevronRight className="size-2.5" />
           </span>
@@ -522,13 +546,14 @@ const COLUMNS = [
   "",
   "#",
   "유형",
-  "항목명 · 상세",
+  "항목명",
+  "상세",
   "정산 기준",
   "OPERATION",
   "보조값",
   "세금",
-  "수식",
   "금액",
+  "",
 ];
 
 export function SettlementItemTable() {
@@ -794,10 +819,10 @@ export function SettlementItemTable() {
           <tr className="sticky top-0 z-[1] border-b border-[var(--aca-gray-100)] bg-[#F7F5EE]">
             {COLUMNS.map((h, i) => {
               const alignClass =
-                i >= 9 ? "text-right" : i === 7 ? "text-center" : "text-left";
-              const padLeftClass = i === 0 ? "pl-4" : i === 7 ? "pl-1.5" : "pl-2";
-              const padRightClass = i === 9 ? "pr-4" : i === 7 ? "pr-1.5" : "pr-2";
-              const isInteractiveHeader = i === 0 || i === 7;
+                i === 9 ? "text-right" : i === 8 || i === 10 ? "text-center" : "text-left";
+              const padLeftClass = i === 0 ? "pl-4" : i === 8 ? "pl-1.5" : "pl-2";
+              const padRightClass = i === 10 ? "pr-4" : i === 8 ? "pr-1.5" : "pr-2";
+              const isInteractiveHeader = i === 0 || i === 8;
               return (
                 <th
                   key={h || `col-${i}`}
@@ -814,7 +839,7 @@ export function SettlementItemTable() {
                       color="#2BB673"
                       ariaLabel="전체 선택"
                     />
-                  ) : i === 7 && rules.length > 0 ? (
+                  ) : i === 8 && rules.length > 0 ? (
                     <span className="inline-flex items-center justify-center gap-1.5">
                       <span>{h}</span>
                       <MiniCheckbox

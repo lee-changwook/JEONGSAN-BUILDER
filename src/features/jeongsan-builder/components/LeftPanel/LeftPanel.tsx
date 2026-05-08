@@ -1,7 +1,13 @@
 "use client";
 
-import { useRef } from "react";
-import { AlertTriangle, File as FileIcon, X } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  AlertTriangle,
+  File as FileIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from "lucide-react";
 
 import { DropZone } from "@/features/jeongsan-builder/components/LeftPanel/DropZone";
 import { PanelSection } from "@/features/jeongsan-builder/components/LeftPanel/PanelSection";
@@ -26,6 +32,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
 
 export function LeftPanel() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const uploaded = useBuilderStore((s) => s.calculator !== null);
   const pendingFile = useBuilderStore((s) => s.pendingFile);
@@ -69,6 +76,22 @@ export function LeftPanel() {
   const selectedFileName = payFile?.name ?? pendingFile?.name ?? null;
   const hasFile = selectedFileName !== null;
 
+  if (collapsed) {
+    return (
+      <div className="flex h-full w-[44px] shrink-0 flex-col items-center border-r border-[var(--aca-gray-100)] bg-[var(--aca-white)] py-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="flex size-8 cursor-pointer items-center justify-center rounded border-none bg-transparent text-[var(--aca-gray-500)] hover:bg-[var(--aca-gray-50)]"
+          aria-label="패널 펼치기"
+          title="패널 펼치기"
+        >
+          <PanelLeftOpen className="size-4" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full w-[380px] shrink-0 flex-col border-r border-[var(--aca-gray-100)] bg-[var(--aca-white)]">
       <input
@@ -83,13 +106,24 @@ export function LeftPanel() {
         }}
       />
 
-      <div className="px-6 pt-[22px] pb-4">
-        <div className="text-xl font-bold tracking-[-0.2px] text-[var(--aca-black)]">
-          정산 빌더
+      <div className="flex items-start justify-between gap-2 px-6 pt-[22px] pb-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-xl font-bold tracking-[-0.2px] text-[var(--aca-black)]">
+            정산 빌더
+          </div>
+          <div className="mt-0.5 text-xs text-[var(--aca-gray-500)]">
+            페이 문서를 업로드하고 월간 정산 데이터를 생성합니다
+          </div>
         </div>
-        <div className="mt-0.5 text-xs text-[var(--aca-gray-500)]">
-          페이 문서를 업로드하고 월간 정산 데이터를 생성합니다
-        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className="-mr-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent text-[var(--aca-gray-400)] hover:bg-[var(--aca-gray-50)] hover:text-[var(--aca-gray-600)]"
+          aria-label="패널 접기"
+          title="패널 접기"
+        >
+          <PanelLeftClose className="size-4" />
+        </button>
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-5">
