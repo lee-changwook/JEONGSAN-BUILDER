@@ -477,7 +477,7 @@ function baseValueFromAgg(base: BaseId, agg: ClassAggregate): number {
     case "students":
       return agg.students;
     case "unpaidShare":
-      return agg.unpaid;
+      return -agg.unpaid;
     case "currentUnpaidNeg":
       // 현재 미납금액(-): 당월 미납(agg.unpaid) + 전월 미납 중 아직 회수되지 않은 잔액
       // (agg.hoesu.minapTotal)의 합에 음수 부호를 붙여 반환. 주로 synthetic 수업에서
