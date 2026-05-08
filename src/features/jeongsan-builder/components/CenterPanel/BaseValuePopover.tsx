@@ -59,11 +59,11 @@ const GROUPS: Array<{ title: string; items: OptionMeta[] }> = [
   {
     title: "미납",
     items: [
-      { id: "unpaidShare", label: "미납금", hint: "미납액 합" },
+      { id: "unpaidShare", label: "이번달 미납액 (-)", hint: "당월 미납액을 음수로" },
       {
         id: "currentUnpaidNeg",
-        label: "현재 미납금액 (-)",
-        hint: "당월 미납 + 전월 미회수를 음수로",
+        label: "총 미납금액 (-)",
+        hint: "당월 미납 + 전월 미회수 합산을 음수로",
       },
     ],
   },
@@ -92,7 +92,7 @@ function baseValueOf(id: BaseId, agg: ClassAggregate): number {
     case "students":
       return agg.students;
     case "unpaidShare":
-      return agg.unpaid;
+      return -agg.unpaid;
     case "currentUnpaidNeg":
       return -(agg.unpaid + agg.hoesu.minapTotal);
     case "direct":

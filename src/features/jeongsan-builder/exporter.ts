@@ -84,8 +84,8 @@ const BASE_LABEL: Record<BaseId, string> = {
   revenueWithUnpaidNet: "매출 + 미납회수 (수수료 적용)",
   hours: "시수",
   students: "학생 수",
-  unpaidShare: "미납금",
-  currentUnpaidNeg: "현재 미납금액 (-)",
+  unpaidShare: "이번달 미납액 (-)",
+  currentUnpaidNeg: "총 미납금액 (-)",
   direct: "직접 입력",
 };
 
@@ -471,7 +471,6 @@ function renderRuleRow(
   const auxValue = ruleShowsAux(rule.op) ? rule.value : null;
 
   const auxCellAddr = `${colLetter(RULE_COL.aux)}${row}`;
-  const baseCellAddr = `${colLetter(RULE_COL.baseVal)}${row}`;
   const taxCellAddr = `${colLetter(RULE_COL.tax)}${row}`;
 
   type CellSpec = {
@@ -482,14 +481,35 @@ function renderRuleRow(
     resultFallback?: number;
   };
 
+  // 금액 수식: 세액 컬럼(K)에 값이 있으면 반드시 금액에서 차감한다.
+  // G열(이번달 납부액)은 실제 납부액 고정값이므로 수식에서 참조하지 않고
+  // baseVal을 숫자 리터럴로 embed한다.
+  const amountFormula = ((): string => {
+    const tax = `IFERROR(${taxCellAddr},0)`;
+    switch (rule.op) {
+      case "rate":
+      case "multiply":
+        // 금액 = 보조값 × 베이스 - 세금
+        return `${auxCellAddr}*${baseVal}-${tax}`;
+      case "add":
+        // 금액 = 베이스 + 보조값 - 세금
+        return `${baseVal}+${auxCellAddr}-${tax}`;
+      case "fixed":
+        // 금액 = 베이스 - 세금 (보조값 없음)
+        return `${baseVal}-${tax}`;
+      case "custom":
+        // custom은 복잡한 케이스라 정적값 유지 — formula 반환 없음
+        return "";
+    }
+  })();
+
   const amountSpec: CellSpec =
-    rule.op === "rate"
+    amountFormula
       ? {
         col: RULE_COL.amount,
         value: null,
         numFmt: "#,##0",
-        // 비율일 때: 보조값 × 정산 기준− 세금(세금은 음수 처리 위해 빈 셀일 땐 0 취급)
-        formula: `${auxCellAddr}*${baseCellAddr}-IFERROR(${taxCellAddr},0)`,
+        formula: amountFormula,
         resultFallback: amount,
       }
       : { col: RULE_COL.amount, value: amount, numFmt: "#,##0" };
@@ -503,15 +523,10 @@ function renderRuleRow(
     { col: RULE_COL.prevRecovered, value: classMetrics.prevRecoveredPay, numFmt: "#,##0" },
     {
       col: RULE_COL.baseVal,
-      value: baseVal,
-      // 베이스 종류별 포맷: hours는 소수 허용(예: 8.5시간), students는 정수 카운트,
-      // 그 외(금액류)는 천단위 구분.
-      numFmt:
-        rule.base === "hours"
-          ? "0.###"
-          : rule.base === "students"
-            ? "0"
-            : "#,##0",
+      // 정산기준에 관계없이 실제 납부액(payTotal 합)을 표시한다.
+      // 미납이면 0, 부분 납부면 그 금액. baseVal(정산 계산용)과는 무관.
+      value: classMetrics.thisMonthPaid,
+      numFmt: "#,##0",
     },
     { col: RULE_COL.baseKind, value: BASE_LABEL[rule.base] },
     { col: RULE_COL.op, value: OP_LABEL[rule.op] },
@@ -553,6 +568,8 @@ interface RuleClassMetrics {
   prevUnpaid: number;
   thisMonthUnpaid: number;
   prevRecoveredPay: number;
+  /** 실제 납부액 (payTotal 합계). 정산기준과 무관하게 학생이 실제로 낸 금액. */
+  thisMonthPaid: number;
 }
 
 /**
@@ -598,6 +615,7 @@ function computeRuleClassMetrics(
       prevUnpaid: 0,
       thisMonthUnpaid: 0,
       prevRecoveredPay: 0,
+      thisMonthPaid: 0,
     };
   }
   const agg = calculator.getClassAggregate(teacherId, rule.classIds);
@@ -605,6 +623,7 @@ function computeRuleClassMetrics(
     prevUnpaid: agg.hoesu.hoesuTotal + agg.hoesu.minapTotal,
     thisMonthUnpaid: agg.unpaid,
     prevRecoveredPay: agg.hoesu.payTotal,
+    thisMonthPaid: agg.classes.reduce((s, c) => s + c.pay, 0),
   };
 }
 
