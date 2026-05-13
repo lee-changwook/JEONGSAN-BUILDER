@@ -517,14 +517,6 @@ function parseSheet(sheetName: string, matrix: SheetMatrix) {
   };
 }
 
-function parseYearMonth(fileName: string) {
-  const matched = fileName.match(/(20\d{2})[-_.년\s]*(\d{1,2})/);
-  return {
-    year: matched ? Number(matched[1]) : new Date().getFullYear(),
-    month: matched ? Number(matched[2]) : new Date().getMonth() + 1,
-  };
-}
-
 function sueopTeacherKey(jojikName: string, sueopName: string) {
   return `${jojikName.trim()}::${sueopName.trim()}`;
 }
@@ -581,6 +573,13 @@ function hasAllowedExtension(fileName: string): boolean {
   return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
+export interface ParsePayDocumentOptions {
+  /** 사용자가 지정한 정산 대상 연도. 진실은 사용자 입력. */
+  year: number;
+  /** 사용자가 지정한 정산 대상 월(1-12). */
+  month: number;
+}
+
 /**
  * 이미 ArrayBuffer/Uint8Array/Buffer를 들고 있는 호출부용 저수준 API.
  * UI 컴포넌트는 {@link parsePayDocument}를 우선 사용한다.
@@ -588,6 +587,7 @@ function hasAllowedExtension(fileName: string): boolean {
 export function parsePayDocumentBuffer(
   sourceFileName: string,
   workbookInput: ArrayBuffer | Uint8Array,
+  options: ParsePayDocumentOptions,
 ): PayDocumentParseResult {
   if (!hasAllowedExtension(sourceFileName)) {
     throw new Error("페이 문서는 .xlsx 또는 .xls 형식이어야 합니다.");
@@ -601,12 +601,10 @@ export function parsePayDocumentBuffer(
     throw new Error(`페이 문서를 읽을 수 없습니다: ${message}`);
   }
 
-  const { year, month } = parseYearMonth(sourceFileName);
-
   return resolveTeacherNames({
     sourceFileName,
-    year,
-    month,
+    year: options.year,
+    month: options.month,
     sheets: workbook.SheetNames.map((sheetName) => {
       const worksheet = workbook.Sheets[sheetName];
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
@@ -625,11 +623,14 @@ export function parsePayDocumentBuffer(
  * - arrayBuffer 변환 포함
  * - XLSX.read 실패 시 사용자 친화 메시지로 감싸 throw
  */
-export async function parsePayDocument(file: File): Promise<PayDocumentParseResult> {
+export async function parsePayDocument(
+  file: File,
+  options: ParsePayDocumentOptions,
+): Promise<PayDocumentParseResult> {
   if (!hasAllowedExtension(file.name)) {
     throw new Error("페이 문서는 .xlsx 또는 .xls 형식이어야 합니다.");
   }
 
   const buffer = await file.arrayBuffer();
-  return parsePayDocumentBuffer(file.name, buffer);
+  return parsePayDocumentBuffer(file.name, buffer, options);
 }

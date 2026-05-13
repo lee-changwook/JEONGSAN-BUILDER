@@ -122,12 +122,16 @@ function fileInfoFromParseResult(
       if (name) teacherNames.add(name);
     }
   }
-  const mm = String(parseResult.month).padStart(2, "0");
   return {
     name: parseResult.sourceFileName,
-    periodLabel: `${parseResult.year}-${mm} 페이 문서`,
+    periodLabel: makePeriodLabel(parseResult.year, parseResult.month),
     teacherCount: teacherNames.size,
   };
+}
+
+function makePeriodLabel(year: number, month: number): string {
+  const mm = String(month).padStart(2, "0");
+  return `${year}-${mm} 페이 문서`;
 }
 
 export const useBuilderStore = create<BuilderState>((set) => ({
@@ -152,8 +156,55 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   addItemModal: { open: false, entryMode: null },
 
   // --- upload ---
-  setYear: (year) => set({ year }),
-  setMonth: (month) => set({ month }),
+  setYear: (year) =>
+    set((state) => {
+      const yearNum = Number(year);
+      if (!state.parseResult || !state.calculator || !Number.isFinite(yearNum)) {
+        return { year };
+      }
+      // 업로드 후 사용자가 월/연도를 바꾸면 calculator의 사용자 편집(rule)은 보존하고
+      // 표시용 메타(year/month)만 갱신. parseResult를 새 year/month로 재포장한 뒤
+      // 기존 rule을 initialRules로 넘겨 calculator를 재생성한다.
+      const monthNum = Number(state.month);
+      const nextParseResult: PayDocumentParseResult = {
+        ...state.parseResult,
+        year: yearNum,
+        month: Number.isFinite(monthNum)
+          ? monthNum
+          : state.parseResult.month,
+      };
+      const { rulesByTeacher } = state.calculator.snapshot();
+      return {
+        year,
+        parseResult: nextParseResult,
+        calculator: createCalculator(nextParseResult, {
+          initialRules: rulesByTeacher,
+        }),
+        payFile: fileInfoFromParseResult(nextParseResult),
+      };
+    }),
+  setMonth: (month) =>
+    set((state) => {
+      const monthNum = Number(month);
+      if (!state.parseResult || !state.calculator || !Number.isFinite(monthNum)) {
+        return { month };
+      }
+      const yearNum = Number(state.year);
+      const nextParseResult: PayDocumentParseResult = {
+        ...state.parseResult,
+        year: Number.isFinite(yearNum) ? yearNum : state.parseResult.year,
+        month: monthNum,
+      };
+      const { rulesByTeacher } = state.calculator.snapshot();
+      return {
+        month,
+        parseResult: nextParseResult,
+        calculator: createCalculator(nextParseResult, {
+          initialRules: rulesByTeacher,
+        }),
+        payFile: fileInfoFromParseResult(nextParseResult),
+      };
+    }),
   setPendingFile: (file) => set({ pendingFile: file, parseError: null }),
 
   startParsing: () => set({ isParsing: true, parseError: null }),
@@ -167,8 +218,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       parseResult,
       calculator,
       payFile: fileInfoFromParseResult(parseResult),
-      year: String(parseResult.year),
-      month: String(parseResult.month),
+      // year/month는 사용자 선택값이 진실이므로 덮어쓰지 않는다.
       activeTeacherId: firstTeacherId,
       selectedRuleIds: {},
       exportChecks: new Set<string>(),
@@ -288,12 +338,12 @@ export const useBuilderStore = create<BuilderState>((set) => ({
     set((state) =>
       state.calculator
         ? {
-            calculator: state.calculator.bulkSetCustomBase(
-              teacherId,
-              ruleIds,
-              customBase,
-            ),
-          }
+          calculator: state.calculator.bulkSetCustomBase(
+            teacherId,
+            ruleIds,
+            customBase,
+          ),
+        }
         : state,
     ),
 
@@ -308,12 +358,12 @@ export const useBuilderStore = create<BuilderState>((set) => ({
     set((state) =>
       state.calculator
         ? {
-            calculator: state.calculator.bulkSetTaxable(
-              teacherId,
-              ruleIds,
-              taxable,
-            ),
-          }
+          calculator: state.calculator.bulkSetTaxable(
+            teacherId,
+            ruleIds,
+            taxable,
+          ),
+        }
         : state,
     ),
 
@@ -321,12 +371,12 @@ export const useBuilderStore = create<BuilderState>((set) => ({
     set((state) =>
       state.calculator
         ? {
-            calculator: state.calculator.bulkSetBase(
-              teacherId,
-              ruleIds,
-              base,
-            ),
-          }
+          calculator: state.calculator.bulkSetBase(
+            teacherId,
+            ruleIds,
+            base,
+          ),
+        }
         : state,
     ),
 

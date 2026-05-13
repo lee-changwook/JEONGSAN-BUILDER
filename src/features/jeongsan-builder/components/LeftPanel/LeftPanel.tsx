@@ -54,9 +54,18 @@ export function LeftPanel() {
 
   async function runBuild() {
     if (!pendingFile) return;
+    const yearNum = Number(year);
+    const monthNum = Number(month);
+    if (!Number.isFinite(yearNum) || !Number.isFinite(monthNum)) {
+      setParseError("정산 대상 연도와 월을 먼저 선택해 주세요.");
+      return;
+    }
     startParsing();
     try {
-      const result = await parsePayDocument(pendingFile);
+      const result = await parsePayDocument(pendingFile, {
+        year: yearNum,
+        month: monthNum,
+      });
       ingestParseResult(result);
     } catch (error) {
       const message =
