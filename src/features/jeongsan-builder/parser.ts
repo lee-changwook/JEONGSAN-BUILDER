@@ -12,6 +12,7 @@
 import * as XLSX from "xlsx";
 import type {
   FieldTrace,
+  Money,
   PayDocumentBlock,
   PayDocumentBlockKind,
   PayDocumentBlockTotals,
@@ -33,6 +34,12 @@ export type {
 type SheetMatrix = unknown[][];
 
 const ALLOWED_EXTENSIONS = [".xlsx", ".xls"] as const;
+
+/**
+ * 보충비 성격의 시트를 식별하는 시트명 조각.
+ * `보충비`는 구버전, `추가 청구`는 PRJ-024 이후 이름이다.
+ */
+const BOCHUNGBI_SHEET_PATTERNS = ["보충", "추가 청구"] as const;
 
 function text(value: unknown) {
   if (value === null || value === undefined) {
@@ -72,6 +79,17 @@ function traced<T>(
     },
   };
 }
+
+/**
+ * PRJ-024에서 수업 카드의 `할인` 열이 제거됐다(슬롯당 7열 → 6열).
+ * 스키마(`PayDocumentRow.harinAmount`)는 schema 페이지 데모 파서와 공유하므로 그대로 두고,
+ * 대응하는 엑셀 셀이 없다는 뜻으로 `cell` 없이 0을 채운다.
+ */
+const HARIN_REMOVED: FieldTrace<Money> = {
+  value: 0,
+  source: "computed",
+  sourceLabel: "할인 열 없음 (PRJ-024에서 제거)",
+};
 
 /**
  * 엑셀 헤더의 분반 표기 규약:
@@ -298,20 +316,19 @@ function parseRegularRows(
     }
 
     const quantityLabel = text(row[studentColumnIndex]);
-    const harinAmount = numberValue(row[studentColumnIndex + 1]);
-    const nabipAmount = numberValue(row[studentColumnIndex + 2]);
-    const minapAmount = numberValue(row[studentColumnIndex + 3]);
-    const gyeoljeSudan = text(row[studentColumnIndex + 4]);
-    const payAmount = numberValue(row[studentColumnIndex + 5]);
+    const nabipAmount = numberValue(row[studentColumnIndex + 1]);
+    const minapAmount = numberValue(row[studentColumnIndex + 2]);
+    const gyeoljeSudan = text(row[studentColumnIndex + 3]);
+    const payAmount = numberValue(row[studentColumnIndex + 4]);
     const base = {
       id: `${sheetName}-${headerRowIndex}-${studentColumnIndex}-${rowIndex}`,
       rowNumber: rowIndex,
       sugangsaengName: traced(studentText, sheetName, rowIndex, studentColumnIndex),
-      harinAmount: traced(harinAmount, sheetName, rowIndex, studentColumnIndex + 2),
-      nabipAmount: traced(nabipAmount, sheetName, rowIndex, studentColumnIndex + 3),
-      minapAmount: traced(minapAmount, sheetName, rowIndex, studentColumnIndex + 4),
-      gyeoljeSudan: traced(gyeoljeSudan, sheetName, rowIndex, studentColumnIndex + 5),
-      payAmount: traced(payAmount, sheetName, rowIndex, studentColumnIndex + 6),
+      harinAmount: HARIN_REMOVED,
+      nabipAmount: traced(nabipAmount, sheetName, rowIndex, studentColumnIndex + 2),
+      minapAmount: traced(minapAmount, sheetName, rowIndex, studentColumnIndex + 3),
+      gyeoljeSudan: traced(gyeoljeSudan, sheetName, rowIndex, studentColumnIndex + 4),
+      payAmount: traced(payAmount, sheetName, rowIndex, studentColumnIndex + 5),
     };
 
     if (sheetKind === "bochungbi") {
@@ -428,7 +445,9 @@ function parseRegularBlock(
     sheetKind,
     jojikName: traced(jojik.value, sheetName, jojik.rowIndex, jojik.columnIndex, "조직/관"),
     teacherName,
-    monthLabel: text(matrix[headerRowIndex - 2]?.[studentColumnIndex - 2]) || "",
+    // monthLabel은 슬롯과 무관하게 A열에만 들어간다(renderLabelColumn).
+    // 학생명 열 왼쪽을 읽으면 슬롯 1~3에서 옆 카드의 병합된 제목 영역을 읽게 된다.
+    monthLabel: text(matrix[headerRowIndex - 2]?.[0]) || "",
     titleText: traced(titleText, sheetName, headerRowIndex - 1, studentColumnIndex),
     ...parseTitle(titleText),
     rows,
@@ -478,7 +497,9 @@ function parseArrearsBlock(
 }
 
 function parseSheet(sheetName: string, matrix: SheetMatrix) {
-  const sheetKind: PayDocumentSheetKind = sheetName.includes("보충")
+  const sheetKind: PayDocumentSheetKind = BOCHUNGBI_SHEET_PATTERNS.some((pattern) =>
+    sheetName.includes(pattern),
+  )
     ? "bochungbi"
     : "sueop_minap";
   const blocks: PayDocumentBlock[] = [];
